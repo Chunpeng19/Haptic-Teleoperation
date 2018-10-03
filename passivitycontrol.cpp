@@ -3,34 +3,30 @@
 //
 //  Version 3.6.0
 
-#include "stdafx.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
 
 #include "drdc.h"
-
-#include <engine.h>
 #include <iostream>
 #include <string>
-
-#pragma comment ( lib, "libmx.lib" )
-#pragma comment ( lib, "libeng.lib" )
-#pragma comment ( lib, "libmex.lib" )
-#pragma comment ( lib, "libmat.lib" )
 
 #define MIN(x,y) (x)<(y)?(x):(y)
 #define MAX(x,y) (x)>(y)?(x):(y)
 
-#define DEFAULT_K 12.0  // 1.0 12.0 14.0 16.0
+#define DEFAULT_K 12.0
 #define N 3
-#define DELAYCONST 1 // max 2001 141 121 101
-#define DELAYCONSTMAX 141
-#define CYCLETIME 0.25e-3
-#define ALPHA 0.08 // 0.08
+#define DELAYCONST 10
+#define DELAYCONSTMAX 2000
+#define DELAYSTEP 10
+#define CYCLETIME 0.127e-3
+#define ALPHA 0.05 // 0.08
 #define ENC 20300 // encoder reading corresponding to origin
+
+#define PI 3.1415926
+#define FREQN 1.0e2
+#define zeta 0.707
 
 double mp[N] = { 0.0 }; // end-effector position
 double sp[N] = { 0.0 };
@@ -41,14 +37,14 @@ double sj[N] = { 0.0 };
 double mv[N] = { 0.0 }; // angular velocity
 double sv[N] = { 0.0 };
 
-double mvbackv[N] = { 0.0 }; // last step angular velocity
-double svbackv[N] = { 0.0 };
+double mvBackv[2][N] = { 0.0 }; // last step angular velocity
+double svBackv[2][N] = { 0.0 };
 
-double mjback[DELAYCONSTMAX][N] = { 0.0 }; // list of backstep joint angle to simulate delay
-double sjback[DELAYCONSTMAX][N] = { 0.0 };
+double mjBack[DELAYCONSTMAX][N] = { 0.0 }; // list of backstep joint angle to simulate delay
+double sjBack[DELAYCONSTMAX][N] = { 0.0 };
 
-double mvback[DELAYCONSTMAX][N] = { 0.0 }; //list of backstep angular velocity to simulate delay
-double svback[DELAYCONSTMAX][N] = { 0.0 };
+double mvBack[DELAYCONSTMAX][N] = { 0.0 }; //list of backstep angular velocity to simulate delay
+double svBack[DELAYCONSTMAX][N] = { 0.0 };
 
 double mjDelay[N];
 double mvDelay[N];
@@ -60,12 +56,28 @@ double mt[N]; // output torque
 double st[N];
 
 double Kp = DEFAULT_K;
-double Kv;
+double Kv = Kp / 400;
 double Kd;
+
+double omegan = 2 * PI * FREQN;
 
 int delayConst = DELAYCONST;
 
 int    done = 0;
+
+double velocityCalculator(double vBack1, double vBack2, double vEst0, double vEst1, double vEst2, double time) {
+	double K = omegan / tan(omegan * time / 2);	
+	double v;
+	double a0 = K * K + 4 * K * zeta * omegan + omegan * omegan;
+	double a1 = 2 * omegan * omegan - 2 * K * K;
+	double a2 = K * K - 4 * K * zeta * omegan + omegan * omegan;
+	double b0 = omegan * omegan;
+	double b1 = 2 * omegan * omegan;
+	double b2 = omegan * omegan;
+	//v = vEst0 * ALPHA + (1 - ALPHA) * vBack1;
+	v = (b0 * vEst0 + b1 * vEst1 + b2 * vEst2 - a1 * vBack1 - a2 * vBack2) / a0;
+	return v;
+}
 
 // master's haptic loop
 void *masterThread(void *arg)
@@ -78,19 +90,9 @@ void *masterThread(void *arg)
 	double mCycleTime;
 	int mDelayIndex = 0;
 
-	while (!done) {
+	double mvEst[N][N] = { 0.0 };
 
-		// increase kgain to target value
-		if (Kp < DEFAULT_K) {
-			Kp += Kp / 400;
-			Kv = Kp / 800;
-			Kd = 0.25e-3*(delayConst - 1)*Kp;
-		}
-		else {
-			Kp = DEFAULT_K;
-			Kv = Kp / 800;
-			Kd = 0.25e-3*(delayConst - 1)*Kp;
-		}
+	while (!done) {
 
 		// get master's position and velocity
 		dhdGetDeltaJointAngles(&mj[0], &mj[1], &mj[2], master);
@@ -102,23 +104,27 @@ void *masterThread(void *arg)
 
 		// calculate master's velocity
 		for (int i = 0; i < N; i++) {
-			if (mDelayIndex == 0) mv[i] = (mj[i] - mjback[DELAYCONSTMAX - 1][i]) / mCycleTime * ALPHA + (1 - ALPHA)*mvbackv[i];
-			else mv[i] = (mj[i] - mjback[mDelayIndex - 1][i]) / mCycleTime * ALPHA + (1 - ALPHA)*mvbackv[i];
-			mvbackv[i] = mv[i];
+			if (mDelayIndex == 0)	mvEst[0][i] = (mj[i] - mjBack[DELAYCONSTMAX - 1][i]) / mCycleTime;
+			else	mvEst[0][i] = (mj[i] - mjBack[mDelayIndex - 1][i]) / mCycleTime;
+			mv[i] = velocityCalculator(mvBackv[0][i], mvBackv[1][i], mvEst[0][i], mvEst[1][i], mvEst[2][i], mCycleTime);
+			mvBackv[1][i] = mvBackv[0][i];
+			mvBackv[0][i] = mv[i];
+			mvEst[2][i] = mvEst[1][i];
+			mvEst[1][i] = mvEst[0][i];
 		}
 
 		// set backward position and velocity
 		for (int i = 0; i < N; i++) {
 			if (mDelayIndex - delayConst < 0) {
-				mjDelay[i] = mjback[mDelayIndex + DELAYCONSTMAX - delayConst][i];
-				mvDelay[i] = mvback[mDelayIndex + DELAYCONSTMAX - delayConst][i];
+				mjDelay[i] = mjBack[mDelayIndex + DELAYCONSTMAX - delayConst][i];
+				mvDelay[i] = mvBack[mDelayIndex + DELAYCONSTMAX - delayConst][i];
 			}
 			else {
-				mjDelay[i] = mjback[mDelayIndex - delayConst][i];
-				mvDelay[i] = mvback[mDelayIndex - delayConst][i];
+				mjDelay[i] = mjBack[mDelayIndex - delayConst][i];
+				mvDelay[i] = mvBack[mDelayIndex - delayConst][i];
 			}
-			mjback[mDelayIndex][i] = mj[i];
-			mvback[mDelayIndex][i] = mv[i];
+			mjBack[mDelayIndex][i] = mj[i];
+			mvBack[mDelayIndex][i] = mv[i];
 		}
 
 		// calculate master's joint torque 
@@ -152,6 +158,8 @@ void *slaveThread(void *arg)
 	double sCycleTime;
 	int sDelayIndex = 0;
 
+	double svEst[N][N] = { 0.0 };
+
 	// loop while the button is not pushed
 	while (!done) {
 
@@ -165,23 +173,27 @@ void *slaveThread(void *arg)
 
 		// calculate master's velocity
 		for (int i = 0; i < N; i++) {
-			if (sDelayIndex == 0) sv[i] = (sj[i] - sjback[DELAYCONSTMAX - 1][i]) / sCycleTime * ALPHA + (1 - ALPHA)*svbackv[i];
-			else sv[i] = (sj[i] - sjback[sDelayIndex - 1][i]) / sCycleTime * ALPHA + (1 - ALPHA)*svbackv[i];
-			svbackv[i] = sv[i];
+			if (sDelayIndex == 0)	svEst[0][i] = (sj[i] - sjBack[DELAYCONSTMAX - 1][i]) / sCycleTime;
+			else	svEst[0][i] = (sj[i] - sjBack[sDelayIndex - 1][i]) / sCycleTime;
+			sv[i] = velocityCalculator(svBackv[0][i], svBackv[1][i], svEst[0][i], svEst[1][i], svEst[2][i], sCycleTime);
+			svBackv[1][i] = svBackv[0][i];
+			svBackv[0][i] = sv[i];
+			svEst[2][i] = svEst[1][i];
+			svEst[1][i] = svEst[0][i];
 		}
 
 		// set backward position and velocity
 		for (int i = 0; i < N; i++) {
 			if (sDelayIndex - delayConst < 0) {
-				sjDelay[i] = sjback[sDelayIndex + DELAYCONSTMAX - delayConst][i];
-				svDelay[i] = svback[sDelayIndex + DELAYCONSTMAX - delayConst][i];
+				sjDelay[i] = sjBack[sDelayIndex + DELAYCONSTMAX - delayConst][i];
+				svDelay[i] = svBack[sDelayIndex + DELAYCONSTMAX - delayConst][i];
 			}
 			else {
-				sjDelay[i] = sjback[sDelayIndex - delayConst][i];
-				svDelay[i] = svback[sDelayIndex - delayConst][i];
+				sjDelay[i] = sjBack[sDelayIndex - delayConst][i];
+				svDelay[i] = svBack[sDelayIndex - delayConst][i];
 			}
-			sjback[sDelayIndex][i] = sj[i];
-			svback[sDelayIndex][i] = sv[i];
+			sjBack[sDelayIndex][i] = sj[i];
+			svBack[sDelayIndex][i] = sv[i];
 		}
 
 		// calculate slave's joint torque
@@ -208,10 +220,6 @@ main(int  argc,
 	char **argv)
 {
 	int    master, slave;
-
-	Kp = Kp / 4; // start kgain with a quarter of default k
-	Kv = Kp / 800;
-	Kd = 0.25e-3*(delayConst - 1)*Kp;
 
 	// message
 	int major, minor, release, revision;
@@ -325,8 +333,8 @@ main(int  argc,
 	// initialize lists of backstep joint angle
 	for (int i = 0; i < N; i++) {
 		for (int j = 0; j < DELAYCONSTMAX; j++) {
-			mjback[j][i] = mj[i];
-			sjback[j][i] = sj[i];
+			mjBack[j][i] = mj[i];
+			sjBack[j][i] = sj[i];
 		}
 	}
 
@@ -338,110 +346,11 @@ main(int  argc,
 
 	double curTime, refTime = dhdGetTime();
 
-	// open matlab engine
-	Engine *m_pEngine;
-	m_pEngine = engOpen("null");
-
-	mxArray* dx = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* dy = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* dz = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* sdx = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* sdy = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* sdz = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* time = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* mforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* sforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
-
-	mxArray* ldx = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* ldy = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* ldz = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* lsdx = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* lsdy = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* lsdz = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* ltime = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* lmforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* lsforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
-
-	mxArray* delay = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* kpgain = mxCreateDoubleMatrix(1, 1, mxREAL);
-
-	double* px = mxGetPr(dx);
-	double* py = mxGetPr(dy);
-	double* pz = mxGetPr(dz);
-	double* spx = mxGetPr(sdx);
-	double* spy = mxGetPr(sdy);
-	double* spz = mxGetPr(sdz);
-	double* t = mxGetPr(time);
-	double* mfz = mxGetPr(mforcez);
-	double* sfz = mxGetPr(sforcez);
-
-	double* lpx = mxGetPr(ldx);
-	double* lpy = mxGetPr(ldy);
-	double* lpz = mxGetPr(ldz);
-	double* lspx = mxGetPr(lsdx);
-	double* lspy = mxGetPr(lsdy);
-	double* lspz = mxGetPr(lsdz);
-	double* lt = mxGetPr(ltime);
-	double* lmfz = mxGetPr(lmforcez);
-	double* lsfz = mxGetPr(lsforcez);
-
-	double* td = mxGetPr(delay);
-	double* kgain = mxGetPr(kpgain);
-
-	double t1 = dhdGetTime();
-	double mfy, mfx;
-	double sfy, sfx;
 
 	// loop while the button is not pushed
 	while (!done) {
 
-		*lpz = *pz;
-		*lspz = *spz;
-		*lmfz = *mfz;
-		*lsfz = *sfz;
-		*lt = *t;
-
-		engPutVariable(m_pEngine, "ldz", ldz);
-		engPutVariable(m_pEngine, "lsdz", lsdz);
-
-		engPutVariable(m_pEngine, "lmforcez", lmforcez);
-		engPutVariable(m_pEngine, "lsforcez", lsforcez);
-
-		engPutVariable(m_pEngine, "lt", ltime);
-
-		dhdGetForce(&mfx, &mfy, mfz, master);
-		dhdGetForce(&sfx, &sfy, sfz, slave);
-		//dhdGetDeltaEncoders(&menc[0], &menc[1], &menc[2], master);
-		//dhdGetDeltaEncoders(&senc[0], &senc[1], &senc[2], slave);
-
-		// matlab plot
-		*px = -mp[0];
-		*py = mp[1];
-		*pz = mp[2];
-		*spx = -sp[0];
-		*spy = sp[1];
-		*spz = sp[2];
-
-		//engPutVariable(m_pEngine, "dx", dx);
-		//engPutVariable(m_pEngine, "dy", dy);
-		engPutVariable(m_pEngine, "dz", dz);
-		//engPutVariable(m_pEngine, "sdx", sdx);
-		//engPutVariable(m_pEngine, "sdy", sdy);
-		engPutVariable(m_pEngine, "sdz", sdz);
-
-		engPutVariable(m_pEngine, "mforcez", mforcez);
-		engPutVariable(m_pEngine, "sforcez", sforcez);
-
-		*t = dhdGetTime() - t1;
-		engPutVariable(m_pEngine, "t", time);
-
-		//engEvalString(m_pEngine, "scatter3(dx,dy,dz,'b','filled'),set(gca,'Xlim',[-0.05 0.05],'Ylim',[-0.05 0.05],'Zlim',[-0.05 0.05]),");
-		//engEvalString(m_pEngine, "hold on,scatter3(sdx,sdy,sdz,'r','filled'),");
-		//engEvalString(m_pEngine, "xlabel('x'),ylabel('y'),zlabel('z'),hold off");
-		engEvalString(m_pEngine, "subplot(2,2,1),plot([lt,t],[ldz,dz],'b'),hold on,plot([lt,t],[lsdz,sdz],'r'),");
-		engEvalString(m_pEngine, "subplot(2,2,2),plot([lt,t],[lmforcez,mforcez],'b'),hold on,plot([lt,t],[-lsforcez,-sforcez],'r'),");
-		engEvalString(m_pEngine, "subplot(2,2,3),plot([lt,t],[abs(ldz-lsdz),abs(dz-sdz)],'b'),hold on,");
-		engEvalString(m_pEngine, "subplot(2,2,4),plot([lt,t],[abs(lmforcez+lsforcez),abs(mforcez+sforcez)],'r'),hold on,");
+		Kd = CYCLETIME * delayConst * Kp;
 
 		curTime = dhdGetTime();
 		if ((curTime - refTime) > 0.1) {
@@ -449,10 +358,10 @@ main(int  argc,
 			refTime = curTime;
 
 			// retrieve information to display
-			//printf("%+0.05f %+0.05f %+0.05f ", mt[0], mt[1], mt[2]);
+			printf("%+0.05f %+0.05f ", mv[0], sv[0]);
 			//printf("%+0.05f %+0.05f %+0.05f ", st[0], st[1], st[2]);
 			//printf("%0.03f ", *mfz / abs(*pz - *spz));
-			printf("tau_rt = %0.02f [ms] | ", 2 * 0.25*(delayConst - 1));
+			printf("tau_rt = %0.04f [ms] | ", 2 * CYCLETIME * delayConst * 1.0e3);
 			printf("mf = %0.03f [kHz] | sf = %0.03f [kHz] \r", dhdGetComFreq(0), dhdGetComFreq(1));
 
 
@@ -460,22 +369,12 @@ main(int  argc,
 			if (dhdKbHit()) {
 				switch (dhdKbGet()) {
 				case 'q': done = 1;   break;
-				case ',': delayConst = MAX(delayConst - 1, 1);	break;
-				case '.': delayConst = MIN(delayConst + 1, DELAYCONSTMAX);	break;
+				case ',': delayConst = MAX(delayConst - DELAYSTEP, 1);	break;
+				case '.': delayConst = MIN(delayConst + DELAYSTEP, DELAYCONSTMAX);	break;
 				}
 			}
 		}
 	}
-
-	*td = 2 * 0.25*(delayConst - 1);
-	*kgain = Kp;
-	engPutVariable(m_pEngine, "delay", delay);
-	engPutVariable(m_pEngine, "kpgain", kpgain);
-
-	engEvalString(m_pEngine, "subplot(2,2,1),grid on,xlabel('time(s)'),ylabel('position(m)'),title(['master and slave z-position: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
-	engEvalString(m_pEngine, "subplot(2,2,2),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
-	engEvalString(m_pEngine, "subplot(2,2,3),grid on,xlabel('time(s)'),ylabel('position(m)'),title(['master and slave z-position error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
-	engEvalString(m_pEngine, "subplot(2,2,4),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
 
 	// report exit cause
 	printf("                                                                           \r");
