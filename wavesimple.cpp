@@ -29,7 +29,7 @@
 #define ENC 20300 // encoder reading corresponding to origin
 
 #define WAVEIMPEDANCE 0.1 // from 0.01 to 1.0; 0.05 is the min value to stablize the system at no-delay case 0.16
-#define MAXWAVEIMPEDANCE 0.25
+#define MAXWAVEIMPEDANCE 2.0
 #define MINWAVEIMPEDANCE 0.01
 #define WAVEIMPEDANCESTEP 0.01
 
@@ -41,6 +41,10 @@
 #define ALPHA 1.0e-1 // velocity filter parameter
 #define BETA 1.0e-4 // wave velocity filter parameter
 #define LAMDA 5.0e-4
+
+#define PI 3.1415926
+#define FREQN 2.0e2
+#define zeta 0.707
 
 double mp[N] = { 0.0 };
 double sp[N] = { 0.0 };
@@ -75,13 +79,30 @@ int mIndex = 0;
 double sTotalTime = 0.0;
 int sIndex = 0;
 
+double omegan = 2 * PI * FREQN;
+
+double velocityCalculator(double vBack1, double vBack2, double vEst0, double vEst1, double vEst2, double time) {
+	double K = omegan / tan(omegan * time / 2);	
+	double v;
+	double a0 = K * K + 4 * K * zeta * omegan + omegan * omegan;
+	double a1 = 2 * omegan * omegan - 2 * K * K;
+	double a2 = K * K - 4 * K * zeta * omegan + omegan * omegan;
+	double b0 = omegan * omegan;
+	double b1 = 2 * omegan * omegan;
+	double b2 = omegan * omegan;
+	//v = vEst0 * ALPHA + (1 - ALPHA) * vBack1;
+	v = (b0 * vEst0 + b1 * vEst1 + b2 * vEst2 - a1 * vBack1 - a2 * vBack2) / a0;
+	return v;
+}
+
 // master's haptic loop
 void *masterThread(void *arg)
 {
 	int master = *((int*)arg);
 
 	double mjvBack[N];
-	double mvBackv[N] = { 0.0 };
+	double mvBackv[2][N] = { 0.0 };
+	double mvEst[N][N] = { 0.0 };
 
 	double mjBack[DELAYCONSTMAX][N];
 	
@@ -130,9 +151,13 @@ void *masterThread(void *arg)
 
 		// calculate master's velocity
 		for (int i = 0; i < N; i++) {
-			mv[i] = (mj[i] - mjvBack[i]) / mCycleTime * ALPHA + (1 - ALPHA)*mvBackv[i];
+			mvEst[0][i] = (mj[i] - mjvBack[i]) / mCycleTime;
 			mjvBack[i] = mj[i];
-			mvBackv[i] = mv[i];
+			mv[i] = velocityCalculator(mvBackv[0][i], mvBackv[1][i], mvEst[0][i], mvEst[1][i], mvEst[2][i], mCycleTime);
+			mvBackv[1][i] = mvBackv[0][i];
+			mvBackv[0][i] = mv[i];
+			mvEst[2][i] = mvEst[1][i];
+			mvEst[1][i] = mvEst[0][i];
 		}
 
 		for (int i = 0; i < N; i++) {
@@ -184,8 +209,9 @@ void *slaveThread(void *arg)
 	int slave = *((int*)arg);
 
 	double sjvBack[N];
-	double svBackv[N] = { 0.0 };
-
+	double svBackv[2][N] = { 0.0 };
+	double svEst[N][N] = { 0.0 };
+	
 	double svd[N] = { 0.0 };
 	double sjd[N];	
 
@@ -234,11 +260,15 @@ void *slaveThread(void *arg)
 		sCycleTime = sTempTime - sLastTempTime;
 		sLastTempTime = sTempTime;
 
-		// calculate slave's velocity
+		// calculate master's velocity
 		for (int i = 0; i < N; i++) {
-			sv[i] = (sj[i] - sjvBack[i]) / sCycleTime * ALPHA + (1 - ALPHA)*svBackv[i];
+			svEst[0][i] = (sj[i] - sjvBack[i]) / sCycleTime;
 			sjvBack[i] = sj[i];
-			svBackv[i] = sv[i];
+			sv[i] = velocityCalculator(svBackv[0][i], svBackv[1][i], svEst[0][i], svEst[1][i], svEst[2][i], sCycleTime);
+			svBackv[1][i] = svBackv[0][i];
+			svBackv[0][i] = sv[i];
+			svEst[2][i] = svEst[1][i];
+			svEst[1][i] = svEst[0][i];
 		}
 
 		for (int i = 0; i < N; i++) {
