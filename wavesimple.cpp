@@ -44,7 +44,7 @@
 
 #define PI 3.1415926
 #define FREQN 2.0e2
-#define zeta 0.707
+#define zeta 0.90
 
 double mp[N] = { 0.0 };
 double sp[N] = { 0.0 };
@@ -81,18 +81,25 @@ int sIndex = 0;
 
 double omegan = 2 * PI * FREQN;
 
-double velocityCalculator(double vBack1, double vBack2, double vEst0, double vEst1, double vEst2, double time) {
+// function for calculating velocity
+static void velocityCalculator(double *v, double *vBack, double *vEst, double time) {		
 	double K = omegan / tan(omegan * time / 2);	
-	double v;
 	double a0 = K * K + 4 * K * zeta * omegan + omegan * omegan;
 	double a1 = 2 * omegan * omegan - 2 * K * K;
 	double a2 = K * K - 4 * K * zeta * omegan + omegan * omegan;
 	double b0 = omegan * omegan;
 	double b1 = 2 * omegan * omegan;
 	double b2 = omegan * omegan;
-	//v = vEst0 * ALPHA + (1 - ALPHA) * vBack1;
-	v = (b0 * vEst0 + b1 * vEst1 + b2 * vEst2 - a1 * vBack1 - a2 * vBack2) / a0;
-	return v;
+	
+	for (int i = 0; i < N; i++) {
+		v[i] = (b0 * vEst[i] + b1 * vEst[N + i] + b2 * vEst[2 * N + i] - a1 * vBack[i] - a2 * vBack[N + i]) / a0;
+		//v[i] = vEst[i] * ALPHA + vBack[i] * (1 - ALPHA);
+		vBack[N + i] = vBack[i];
+		vBack[i] = v[i];
+		vEst[2 * N + i]	= vEst[N + i];
+		vEst[N + i] = vEst[i];
+	}
+	
 }
 
 // master's haptic loop
@@ -101,8 +108,8 @@ void *masterThread(void *arg)
 	int master = *((int*)arg);
 
 	double mjvBack[N];
-	double mvBackv[2][N] = { 0.0 };
-	double mvEst[N][N] = { 0.0 };
+	double mvBackv[2 * N] = { 0.0 };
+	double mvEst[N * N] = { 0.0 };
 
 	double mjBack[DELAYCONSTMAX][N];
 	
@@ -151,14 +158,11 @@ void *masterThread(void *arg)
 
 		// calculate master's velocity
 		for (int i = 0; i < N; i++) {
-			mvEst[0][i] = (mj[i] - mjvBack[i]) / mCycleTime;
+			mvEst[i] = (mj[i] - mjvBack[i]) / mCycleTime;
 			mjvBack[i] = mj[i];
-			mv[i] = velocityCalculator(mvBackv[0][i], mvBackv[1][i], mvEst[0][i], mvEst[1][i], mvEst[2][i], mCycleTime);
-			mvBackv[1][i] = mvBackv[0][i];
-			mvBackv[0][i] = mv[i];
-			mvEst[2][i] = mvEst[1][i];
-			mvEst[1][i] = mvEst[0][i];
 		}
+		
+		velocityCalculator(mv, mvBackv, mvEst, mCycleTime);
 
 		for (int i = 0; i < N; i++) {
 			if (mDelayIndex == 0) vmv[i] = ((vsDelay[i] - vmBack[DELAYCONSTMAX - 1][i]) / mCycleTime * BETA + (1 - BETA)*vmvBack[i]) / (1 + sTotalTime / mCycleTime * BETA);
@@ -209,8 +213,8 @@ void *slaveThread(void *arg)
 	int slave = *((int*)arg);
 
 	double sjvBack[N];
-	double svBackv[2][N] = { 0.0 };
-	double svEst[N][N] = { 0.0 };
+	double svBackv[2 * N] = { 0.0 };
+	double svEst[N * N] = { 0.0 };
 	
 	double svd[N] = { 0.0 };
 	double sjd[N];	
@@ -262,14 +266,11 @@ void *slaveThread(void *arg)
 
 		// calculate master's velocity
 		for (int i = 0; i < N; i++) {
-			svEst[0][i] = (sj[i] - sjvBack[i]) / sCycleTime;
+			svEst[i] = (sj[i] - sjvBack[i]) / sCycleTime;
 			sjvBack[i] = sj[i];
-			sv[i] = velocityCalculator(svBackv[0][i], svBackv[1][i], svEst[0][i], svEst[1][i], svEst[2][i], sCycleTime);
-			svBackv[1][i] = svBackv[0][i];
-			svBackv[0][i] = sv[i];
-			svEst[2][i] = svEst[1][i];
-			svEst[1][i] = svEst[0][i];
 		}
+
+		velocityCalculator(sv, svBackv, svEst, sCycleTime);
 
 		for (int i = 0; i < N; i++) {
 			if (sDelayIndex == 0) usv[i] = ((umDelay[i] - usBack[DELAYCONSTMAX - 1][i]) / sCycleTime * BETA + (1 - BETA)*usvBack[i]) / (1 + mTotalTime / sCycleTime * BETA);
@@ -321,9 +322,9 @@ main(int  argc,
 	// message
 	int major, minor, release, revision;
 	dhdGetSDKVersion(&major, &minor, &release, &revision);
-	printf("Force Dimension - Master Slave Example %d.%d.%d.%d\n", major, minor, release, revision);
-	printf("(C) 2001-2015 Force Dimension\n");
-	printf("All Rights Reserved.\n\n");
+	//printf("Force Dimension - Master Slave Example %d.%d.%d.%d\n", major, minor, release, revision);
+	//printf("(C) 2001-2015 Force Dimension\n");
+	//printf("All Rights Reserved.\n\n");
 
 	// open and initialize 2 devices
 	for (int dev = 0; dev < 2; dev++) {
