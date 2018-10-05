@@ -29,7 +29,7 @@
 #define ENC 20300 // encoder reading corresponding to origin
 
 #define WAVEIMPEDANCE 0.1 // from 0.01 to 1.0; 0.05 is the min value to stablize the system at no-delay case 0.16
-#define MAXWAVEIMPEDANCE 2.0
+#define MAXWAVEIMPEDANCE 0.30
 #define MINWAVEIMPEDANCE 0.01
 #define WAVEIMPEDANCESTEP 0.01
 
@@ -81,8 +81,10 @@ int sIndex = 0;
 
 double omegan = 2 * PI * FREQN;
 
+double mjBack[DELAYCONSTMAX * N]; // core dumping reason to make it global
+
 // function for calculating velocity
-static void velocityCalculator(double *v, double *vBack, double *vEst, double time) {		
+static int velocityCalculator(double *v, double *vBack, double *vEst, double *j, double *jBack, double time) {		
 	double K = omegan / tan(omegan * time / 2);	
 	double a0 = K * K + 4 * K * zeta * omegan + omegan * omegan;
 	double a1 = 2 * omegan * omegan - 2 * K * K;
@@ -92,14 +94,73 @@ static void velocityCalculator(double *v, double *vBack, double *vEst, double ti
 	double b2 = omegan * omegan;
 	
 	for (int i = 0; i < N; i++) {
-		v[i] = (b0 * vEst[i] + b1 * vEst[N + i] + b2 * vEst[2 * N + i] - a1 * vBack[i] - a2 * vBack[N + i]) / a0;
-		//v[i] = vEst[i] * ALPHA + vBack[i] * (1 - ALPHA);
+		vEst[i] = (j[i] - jBack[i]) / time;
+		jBack[i] = j[i];
+		//v[i] = (b0 * vEst[i] + b1 * vEst[N + i] + b2 * vEst[2 * N + i] - a1 * vBack[i] - a2 * vBack[N + i]) / a0;
+		v[i] = vEst[i] * ALPHA + vBack[i] * (1 - ALPHA);
 		vBack[N + i] = vBack[i];
 		vBack[i] = v[i];
 		vEst[2 * N + i]	= vEst[N + i];
 		vEst[N + i] = vEst[i];
 	}
+
+	return 0;	
+}
+
+// function for calculating wave velocity
+static int waveVelocityCalculator(double *wavev, double *wavevBack, double *wavePos, double *waveInput, double time, double totalTime, int delayIndex) {
 	
+	for (int i = 0; i < N; i++) {
+		if (delayIndex == 0) wavev[i] = ((waveInput[i] - wavePos[(DELAYCONSTMAX - 1) * N + i]) / time * BETA + (1 - BETA)*wavevBack[i]) / (1 + totalTime / time * BETA);
+		else wavev[i] = ((waveInput[i] - wavePos[(delayIndex - 1) * N + i]) / time * BETA + (1 - BETA)*wavevBack[i]) / (1 + totalTime / time * BETA);
+		wavevBack[i] = wavev[i];
+	}
+
+	return 0;	
+}
+
+// function for master's wave decode and encode
+static int masterWaveDecodeEncode(double *u, double *v, double *wavev, double *waveInput, double *torque, double *velocity, double totalTime) {
+	for (int i = 0; i < N; i++) {			
+		v[i] = waveInput[i] - wavev[i] * totalTime;
+		torque[i] = -(b * velocity[i] - sqrt(2 * b)*v[i]);
+		u[i] = sqrt(2 * b)*velocity[i] - v[i];			
+	}
+	
+	return 0;
+}
+
+
+// function for slave's wave decode and encode
+static int slaveWaveDecodeEncode(double *u, double *v, double *wavev, double *waveInput, double *torque, double *velocity, double *position, double *vd, double *jd, double *jdBack, double *jInput, double time, double totalTime) {
+
+	for (int i = 0; i < N; i++) {			
+		u[i] = waveInput[i] - wavev[i] * totalTime;
+		jd[i] += vd[i] * time + (jInput[i] - jdBack[i]) * LAMDA;
+		vd[i] = (sqrt(2 * b)*u[i] + Kv * velocity[i] + Kp * (position[i] - jd[i])) / (Kv + b);
+		jdBack[i] = jd[i];
+		torque[i] = Kv * (vd[i] - velocity[i]) + Kp * (jd[i] - position[i]);
+		v[i] = u[i] - sqrt(2 / b)*torque[i];		
+	}
+	
+	return 0;
+}
+
+
+// function for mimicing delay
+static int delayMimic(double *varDelay, double *varBack, double *var, int delayIndex) {
+
+	for (int i = 0; i < N; i++) {
+		if (delayIndex - delayConst < 0) {
+			varDelay[i] = varBack[(delayIndex + DELAYCONSTMAX - delayConst) * N + i];		
+		}
+		else {
+			varDelay[i] = varBack[(delayIndex - delayConst) * N + i];		
+		}
+		varBack[delayIndex * N + i] = var[i];	
+	}
+	
+	return 0;
 }
 
 // master's haptic loop
@@ -109,15 +170,10 @@ void *masterThread(void *arg)
 
 	double mjvBack[N];
 	double mvBackv[2 * N] = { 0.0 };
-	double mvEst[N * N] = { 0.0 };
-
-	double mjBack[DELAYCONSTMAX][N];
+	double mvEst[N * N] = { 0.0 };	
 	
 	double vmv[N] = { 0.0 };
 	double vmvBack[N] = { 0.0 };
-
-	double umBack[DELAYCONSTMAX][N] = { 0.0 };
-	double vmBack[DELAYCONSTMAX][N] = { 0.0 };
 
 	double mt[N];
 	double mq[N];
@@ -125,18 +181,26 @@ void *masterThread(void *arg)
 	double mTempTime;
 	double mLastTempTime;
 	double mCycleTime;
+	
+	double umBack[DELAYCONSTMAX * N] = { 0.0 };
+	double vmBack[DELAYCONSTMAX * N] = { 0.0 };
 
 	int mDelayIndex = 0;
 
 	dhdGetDeltaJointAngles(&mj[0], &mj[1], &mj[2], master);
 
+	// joint angle initialization
+	dhdGetDeltaJointAngles(&mj[0], &mj[1], &mj[2], master);
+
 	for (int i = 0; i < N; i++) {
 		mjvBack[i] = mj[i];
-		for(int j = 0; j < DELAYCONST; j++) {
-			mjBack[j][i] = mj[i];	
-		}
+	}
+	
+	for (int i = 0; i < DELAYCONSTMAX * N; i++) {
+		mjBack[i] = mj[i];	
 	}
 
+	// sync start time for control loop
 	mIndex = 1;
 	while (!sIndex) {
 
@@ -148,53 +212,34 @@ void *masterThread(void *arg)
 
 		mTotalTime = delayConst * CYCLETIME;
 
-		// get master's position and velocity
+		// get anglular position and velocity
 		dhdGetDeltaJointAngles(&mj[0], &mj[1], &mj[2], master);
 		dhdDeltaGravityJointTorques(mj[0], mj[1], mj[2], &mq[0], &mq[1], &mq[2], master);
-
+		
+		// calculate loop time
 		mTempTime = dhdGetTime();
 		mCycleTime = mTempTime - mLastTempTime;
 		mLastTempTime = mTempTime;
 
-		// calculate master's velocity
-		for (int i = 0; i < N; i++) {
-			mvEst[i] = (mj[i] - mjvBack[i]) / mCycleTime;
-			mjvBack[i] = mj[i];
-		}
+		// calculate velocity		
+		velocityCalculator(mv, mvBackv, mvEst, mj, mjvBack, mCycleTime);
 		
-		velocityCalculator(mv, mvBackv, mvEst, mCycleTime);
-
-		for (int i = 0; i < N; i++) {
-			if (mDelayIndex == 0) vmv[i] = ((vsDelay[i] - vmBack[DELAYCONSTMAX - 1][i]) / mCycleTime * BETA + (1 - BETA)*vmvBack[i]) / (1 + sTotalTime / mCycleTime * BETA);
-			else vmv[i] = ((vsDelay[i] - vmBack[mDelayIndex - 1][i]) / mCycleTime * BETA + (1 - BETA)*vmvBack[i]) / (1 + sTotalTime / mCycleTime * BETA);
-			vmvBack[i] = vmv[i];
-			vm[i] = vsDelay[i] - vmv[i] * sTotalTime;
-			mt[i] = -(b * mv[i] - sqrt(2 * b)*vm[i]);
-			um[i] = sqrt(2 * b)*mv[i] - vm[i];
-			
-		}
-
+		// calculate vm velocity
+		waveVelocityCalculator(vmv, vmvBack, vmBack, vsDelay, mCycleTime, sTotalTime, mDelayIndex);
+		
+		// decode and encode wave variable
+		masterWaveDecodeEncode(um, vm, vmv, vsDelay, mt, mv, sTotalTime);		
+		
+		// set joint torque
 		dhdSetDeltaJointTorques(mt[0] + mq[0], mt[1] + mq[1], mt[2] + mq[2], master);
 
+		// get Cartesian position
 		dhdGetPosition(&mp[0], &mp[1], &mp[2], master);
 
 		// set backward wave
-		for (int i = 0; i < N; i++) {
-			if (mDelayIndex - delayConst < 0) {
-				umDelay[i] = umBack[mDelayIndex + DELAYCONSTMAX - delayConst][i];
-				vmDelay[i] = vmBack[mDelayIndex + DELAYCONSTMAX - delayConst][i];
-				mjDelay[i] = mjBack[mDelayIndex + DELAYCONSTMAX - delayConst][i];
-			}
-			else {
-				umDelay[i] = umBack[mDelayIndex - delayConst][i];
-				vmDelay[i] = vmBack[mDelayIndex - delayConst][i];
-				mjDelay[i] = mjBack[mDelayIndex - delayConst][i];
-			}
-			umBack[mDelayIndex][i] = um[i];
-			vmBack[mDelayIndex][i] = vm[i];
-			mjBack[mDelayIndex][i] = mj[i];
-		}
-
+		delayMimic(umDelay, umBack, um, mDelayIndex);
+		delayMimic(vmDelay, vmBack, vm, mDelayIndex);
+		delayMimic(mjDelay, mjBack, mj, mDelayIndex);
 		if (mDelayIndex == DELAYCONSTMAX - 1) mDelayIndex = 0;
 		else mDelayIndex++;
 
@@ -215,17 +260,14 @@ void *slaveThread(void *arg)
 	double sjvBack[N];
 	double svBackv[2 * N] = { 0.0 };
 	double svEst[N * N] = { 0.0 };
-	
+
 	double svd[N] = { 0.0 };
 	double sjd[N];	
 
 	double usv[N] = { 0.0 };
 	double usvBack[N] = { 0.0 };
 
-	double usBack[DELAYCONSTMAX][N] = { 0.0 };
-	double vsBack[DELAYCONSTMAX][N] = { 0.0 };
-
-	double sjdBackStep[N];
+	double sjdBack[N];
 
 	double st[N] = { 0.0 };
 	double sq[N];
@@ -234,6 +276,9 @@ void *slaveThread(void *arg)
 	double sLastTempTime;
 	double sCycleTime;
 
+	double usBack[DELAYCONSTMAX * N] = { 0.0 };
+	double vsBack[DELAYCONSTMAX * N] = { 0.0 };
+
 	int sDelayIndex = 0;
 
 	dhdGetDeltaJointAngles(&sj[0], &sj[1], &sj[2], slave);
@@ -241,8 +286,9 @@ void *slaveThread(void *arg)
 	for (int i = 0; i < N; i++) {
 		sjd[i] = sj[i];
 		sjvBack[i] = sj[i];
-		sjdBackStep[i] = sj[i];
+		sjdBack[i] = sj[i];
 	}
+
 
 	sIndex = 1;
 	while (!mIndex) {
@@ -256,54 +302,36 @@ void *slaveThread(void *arg)
 
 		sTotalTime = delayConst * CYCLETIME;
 
-		// get slave's position and velocity
+		// get position and velocity
 		dhdGetDeltaJointAngles(&sj[0], &sj[1], &sj[2], slave);
 		dhdDeltaGravityJointTorques(sj[0], sj[1], sj[2], &sq[0], &sq[1], &sq[2], slave);
-
+		
+		// calculate loop time
 		sTempTime = dhdGetTime();
 		sCycleTime = sTempTime - sLastTempTime;
 		sLastTempTime = sTempTime;
 
-		// calculate master's velocity
-		for (int i = 0; i < N; i++) {
-			svEst[i] = (sj[i] - sjvBack[i]) / sCycleTime;
-			sjvBack[i] = sj[i];
-		}
-
-		velocityCalculator(sv, svBackv, svEst, sCycleTime);
-
-		for (int i = 0; i < N; i++) {
-			if (sDelayIndex == 0) usv[i] = ((umDelay[i] - usBack[DELAYCONSTMAX - 1][i]) / sCycleTime * BETA + (1 - BETA)*usvBack[i]) / (1 + mTotalTime / sCycleTime * BETA);
-			else usv[i] = ((umDelay[i] - usBack[sDelayIndex - 1][i]) / sCycleTime * BETA + (1 - BETA)*usvBack[i]) / (1 + mTotalTime / sCycleTime * BETA);
-			usvBack[i] = usv[i];
-			us[i] = umDelay[i] - usv[i] * mTotalTime;		
-			sjd[i] += svd[i] * sCycleTime + (mjDelay[i] - sjdBackStep[i]) * LAMDA;
-			svd[i] = (sqrt(2 * b)*us[i] + Kv * sv[i] + Kp * (sj[i] - sjd[i])) / (Kv + b);
-			sjdBackStep[i] = sjd[i];
-			st[i] = Kv * (svd[i] - sv[i]) + Kp * (sjd[i] - sj[i]);
-			vs[i] = us[i] - sqrt(2 / b)*st[i];
-		}
-
+		// calculate velocity
+		velocityCalculator(sv, svBackv, svEst, sj, sjvBack, sCycleTime);
+		
+		// calulate wave velocity
+		waveVelocityCalculator(usv, usvBack, usBack, umDelay, sCycleTime, mTotalTime, sDelayIndex);
+		
+		// decode and encode wave variable
+		slaveWaveDecodeEncode(us, vs, usv, umDelay, st, sv, sj, svd, sjd, sjdBack, mjDelay, sCycleTime, mTotalTime);
+		
+		// set joint torque
 		dhdSetDeltaJointTorques(st[0] + sq[0], st[1] + sq[1], st[2] + sq[2], slave);
-
+		
+		// get Cartisian position
 		dhdGetPosition(&sp[0], &sp[1], &sp[2], slave);
 
 		// set backward position and velocity
-		for (int i = 0; i < N; i++) {
-			if (sDelayIndex - delayConst < 0) {
-				usDelay[i] = usBack[sDelayIndex + DELAYCONSTMAX - delayConst][i];
-				vsDelay[i] = vsBack[sDelayIndex + DELAYCONSTMAX - delayConst][i];
-			}
-			else {
-				usDelay[i] = usBack[sDelayIndex - delayConst][i];
-				vsDelay[i] = vsBack[sDelayIndex - delayConst][i];
-			}
-			usBack[sDelayIndex][i] = us[i];
-			vsBack[sDelayIndex][i] = vs[i];
-		}
-		
+		delayMimic(usDelay, usBack, us, sDelayIndex);
+		delayMimic(vsDelay, vsBack, vs, sDelayIndex);		
 		if (sDelayIndex == DELAYCONSTMAX - 1) sDelayIndex = 0;
 		else sDelayIndex++;
+
 
 	}
 
