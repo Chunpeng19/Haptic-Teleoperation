@@ -1,14 +1,16 @@
-//  (C) 2001-2015 Force Dimension
-//  All Rights Reserved.
-//
-//  Version 3.6.0
+// Wave teleoperation
+// Wave impedance and time delay tunable
+// 
+// Chunpeng Wang
 
 #include <stdio.h>
 #include <stdlib.h>
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 
 #include "drdc.h"
+//#include "functionfortele.h"
 
 //#include <engine.h>
 #include <iostream>
@@ -28,7 +30,7 @@
 #define CYCLETIMELOWERLIMIT 0.1e-5
 #define ENC 20300 // encoder reading corresponding to origin
 
-#define WAVEIMPEDANCE 0.1 // from 0.01 to 1.0; 0.05 is the min value to stablize the system at no-delay case 0.16
+#define WAVEIMPEDANCE 0.16 // from 0.01 to 1.0; 0.05 is the min value to stablize the system at no-delay case 0.16
 #define MAXWAVEIMPEDANCE 0.30
 #define MINWAVEIMPEDANCE 0.01
 #define WAVEIMPEDANCESTEP 0.01
@@ -43,7 +45,7 @@
 #define LAMDA 5.0e-4
 
 #define PI 3.1415926
-#define FREQN 2.0e2
+#define FREQN 3.0e2
 #define zeta 0.90
 
 double mp[N] = { 0.0 };
@@ -96,8 +98,8 @@ static int velocityCalculator(double *v, double *vBack, double *vEst, double *j,
 	for (int i = 0; i < N; i++) {
 		vEst[i] = (j[i] - jBack[i]) / time;
 		jBack[i] = j[i];
-		//v[i] = (b0 * vEst[i] + b1 * vEst[N + i] + b2 * vEst[2 * N + i] - a1 * vBack[i] - a2 * vBack[N + i]) / a0;
-		v[i] = vEst[i] * ALPHA + vBack[i] * (1 - ALPHA);
+		v[i] = (b0 * vEst[i] + b1 * vEst[N + i] + b2 * vEst[2 * N + i] - a1 * vBack[i] - a2 * vBack[N + i]) / a0;
+		//v[i] = vEst[i] * ALPHA + vBack[i] * (1 - ALPHA);
 		vBack[N + i] = vBack[i];
 		vBack[i] = v[i];
 		vEst[2 * N + i]	= vEst[N + i];
@@ -120,7 +122,7 @@ static int waveVelocityCalculator(double *wavev, double *wavevBack, double *wave
 }
 
 // function for master's wave decode and encode
-static int masterWaveDecodeEncode(double *u, double *v, double *wavev, double *waveInput, double *torque, double *velocity, double totalTime) {
+static int masterWaveDecodeEncode(double *u, double *v, double *wavev, double *waveInput, double *torque, double *velocity, double totalTime, double b) {
 	for (int i = 0; i < N; i++) {			
 		v[i] = waveInput[i] - wavev[i] * totalTime;
 		torque[i] = -(b * velocity[i] - sqrt(2 * b)*v[i]);
@@ -132,7 +134,7 @@ static int masterWaveDecodeEncode(double *u, double *v, double *wavev, double *w
 
 
 // function for slave's wave decode and encode
-static int slaveWaveDecodeEncode(double *u, double *v, double *wavev, double *waveInput, double *torque, double *velocity, double *position, double *vd, double *jd, double *jdBack, double *jInput, double time, double totalTime) {
+static int slaveWaveDecodeEncode(double *u, double *v, double *wavev, double *waveInput, double *torque, double *velocity, double *position, double *vd, double *jd, double *jdBack, double *jInput, double time, double totalTime, double b) {
 
 	for (int i = 0; i < N; i++) {			
 		u[i] = waveInput[i] - wavev[i] * totalTime;
@@ -148,7 +150,7 @@ static int slaveWaveDecodeEncode(double *u, double *v, double *wavev, double *wa
 
 
 // function for mimicing delay
-static int delayMimic(double *varDelay, double *varBack, double *var, int delayIndex) {
+static int delayMimic(double *varDelay, double *varBack, double *var, int delayIndex, int delayConst) {
 
 	for (int i = 0; i < N; i++) {
 		if (delayIndex - delayConst < 0) {
@@ -196,15 +198,16 @@ void *masterThread(void *arg)
 		mjvBack[i] = mj[i];
 	}
 	
-	for (int i = 0; i < DELAYCONSTMAX * N; i++) {
-		mjBack[i] = mj[i];	
+	for (int i = 0; i < N; i++) {
+		mjvBack[i] = mj[i];
+		for (int j = 0; j < DELAYCONSTMAX; j++) {
+			mjBack[j * N + i] = mj[i];
+		}
 	}
 
 	// sync start time for control loop
 	mIndex = 1;
-	while (!sIndex) {
-
-	}
+	while (!sIndex)
 
 	mLastTempTime = dhdGetTime();
 
@@ -228,7 +231,7 @@ void *masterThread(void *arg)
 		waveVelocityCalculator(vmv, vmvBack, vmBack, vsDelay, mCycleTime, sTotalTime, mDelayIndex);
 		
 		// decode and encode wave variable
-		masterWaveDecodeEncode(um, vm, vmv, vsDelay, mt, mv, sTotalTime);		
+		masterWaveDecodeEncode(um, vm, vmv, vsDelay, mt, mv, sTotalTime, b);		
 		
 		// set joint torque
 		dhdSetDeltaJointTorques(mt[0] + mq[0], mt[1] + mq[1], mt[2] + mq[2], master);
@@ -237,9 +240,9 @@ void *masterThread(void *arg)
 		dhdGetPosition(&mp[0], &mp[1], &mp[2], master);
 
 		// set backward wave
-		delayMimic(umDelay, umBack, um, mDelayIndex);
-		delayMimic(vmDelay, vmBack, vm, mDelayIndex);
-		delayMimic(mjDelay, mjBack, mj, mDelayIndex);
+		delayMimic(umDelay, umBack, um, mDelayIndex, delayConst);
+		delayMimic(vmDelay, vmBack, vm, mDelayIndex, delayConst);
+		delayMimic(mjDelay, mjBack, mj, mDelayIndex, delayConst);
 		if (mDelayIndex == DELAYCONSTMAX - 1) mDelayIndex = 0;
 		else mDelayIndex++;
 
@@ -291,9 +294,7 @@ void *slaveThread(void *arg)
 
 
 	sIndex = 1;
-	while (!mIndex) {
-
-	}
+	while (!mIndex)
 
 	sLastTempTime = dhdGetTime();
 
@@ -318,7 +319,7 @@ void *slaveThread(void *arg)
 		waveVelocityCalculator(usv, usvBack, usBack, umDelay, sCycleTime, mTotalTime, sDelayIndex);
 		
 		// decode and encode wave variable
-		slaveWaveDecodeEncode(us, vs, usv, umDelay, st, sv, sj, svd, sjd, sjdBack, mjDelay, sCycleTime, mTotalTime);
+		slaveWaveDecodeEncode(us, vs, usv, umDelay, st, sv, sj, svd, sjd, sjdBack, mjDelay, sCycleTime, mTotalTime, b);
 		
 		// set joint torque
 		dhdSetDeltaJointTorques(st[0] + sq[0], st[1] + sq[1], st[2] + sq[2], slave);
@@ -327,8 +328,8 @@ void *slaveThread(void *arg)
 		dhdGetPosition(&sp[0], &sp[1], &sp[2], slave);
 
 		// set backward position and velocity
-		delayMimic(usDelay, usBack, us, sDelayIndex);
-		delayMimic(vsDelay, vsBack, vs, sDelayIndex);		
+		delayMimic(usDelay, usBack, us, sDelayIndex, delayConst);
+		delayMimic(vsDelay, vsBack, vs, sDelayIndex, delayConst);		
 		if (sDelayIndex == DELAYCONSTMAX - 1) sDelayIndex = 0;
 		else sDelayIndex++;
 
@@ -447,9 +448,6 @@ main(int  argc,
 	dhdSetForce(0.0, 0.0, 0.0, slave);
 
 	dhdEnableExpertMode();
-
-	//drdEnableFilter(false, master);
-	//drdEnableFilter(false, slave);
 
 	// start slave's haptic loop
 	dhdStartThread(slaveThread, &slave, DHD_THREAD_PRIORITY_DEFAULT);

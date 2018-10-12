@@ -3,8 +3,12 @@
 #include <iostream>
 #include <string>
 
+#define N 3
+#define DELAYCONSTMAX 8000
+#define CYCLETIME 0.137e-3
+
 // master's haptic loop
-void *masterThread(void *arg)
+void *masterControl(void *arg)
 {
 	int master = *((int*)arg);
 
@@ -24,27 +28,28 @@ void *masterThread(void *arg)
 	
 	double umBack[DELAYCONSTMAX * N] = { 0.0 };
 	double vmBack[DELAYCONSTMAX * N] = { 0.0 };
+	double mjBack[DELAYCONSTMAX * N];
 
 	int mDelayIndex = 0;
 
-	dhdGetDeltaJointAngles(&mj[0], &mj[1], &mj[2], master);
+	drdMoveToEnc(ENC, ENC, ENC, false, master);
+	while (drdIsMoving(master))
+	drdStop(true, master);
+	dhdSetForce(0.0, 0.0, 0.0, master);
 
 	// joint angle initialization
 	dhdGetDeltaJointAngles(&mj[0], &mj[1], &mj[2], master);
 
 	for (int i = 0; i < N; i++) {
 		mjvBack[i] = mj[i];
-	}
-	
-	for (int i = 0; i < DELAYCONSTMAX * N; i++) {
-		mjBack[i] = mj[i];	
+		for (int j = 0; j < DELAYCONSTMAX; j++) {
+			mjBack[j * N + i] = mj[i];
+		}
 	}
 
 	// sync start time for control loop
 	mIndex = 1;
-	while (!sIndex) {
-
-	}
+	while (!sIndex)
 
 	mLastTempTime = dhdGetTime();
 

@@ -1,3 +1,6 @@
-g++  wavesimple.cpp -I /home/lynn/Documents/lezhong/sdk-3.7.1.3172-linux-x86_64-gcc/sdk-3.7.1/include -L /home/lynn/Documents/lezhong/sdk-3.7.1.3172-linux-x86_64-gcc/sdk-3.7.1/lib/release/lin-x86_64-gcc -ldrd -lpthread -lusb-1.0 -o wavesimple
+g++  wavesimple.c -I /home/lynn/Documents/chunpeng/Haptic-Teleoperation/include -L /home/lynn/Documents/chunpeng/Haptic-Teleoperation/lib -ldrd -lpthread -lusb-1.0 -o wavesimple
+
+gcc /home/lynn/Documents/chunpeng/Haptic-Teleoperation/include/functionfortele.o /home/lynn/Documents/chunpeng/Haptic-Teleoperation/wavesimple.o -I /home/lynn/Documents/chunpeng/Haptic-Teleoperation/include -L /home/lynn/Documents/chunpeng/Haptic-Teleoperation/lib -ldrd -lpthread -lusb-1.0 -o wavesimple
+
 
 

@@ -1,0 +1,32 @@
+# target
+CFG     = release
+OS      = lin
+ARCH   ?= $(shell echo `uname -m`)
+
+# compiler
+CC      ?= gcc
+CXX     ?= g++
+COMPILER = $(CC)
+
+# common compiler flags
+CXXFLAGS = -O3 -DLINUX -std=c++0x -I$(INC_DIR) -fsigned-char
+
+# set target architecture
+ifeq ($(ARCH), x86_64)
+CFLAGS   += -m64 -march=x86-64
+CXXFLAGS += -m64 -march=x86-64 
+endif
+ifneq (,$(filter $(ARCH),i386 i486 i586 i686))
+CFLAGS   += -m32 -march=$(ARCH) -msse2 -mtune=generic
+CXXFLAGS += -m32 -march=$(ARCH) -msse2 -mtune=generic
+endif
+
+# library location
+BIN_DIR = $(TOP_DIR)/bin
+INC_DIR = $(TOP_DIR)/include
+LIB_DIR = $(TOP_DIR)/lib
+
+# common linker flags
+LDFLAGS += -L$(LIB_DIR)
+LDLIBS  += -lpthread -lusb-1.0 -lrt -ldl
+
