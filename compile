@@ -1,0 +1,3 @@
+g++  wavesimple.cpp -I /home/lynn/Documents/lezhong/sdk-3.7.1.3172-linux-x86_64-gcc/sdk-3.7.1/include -L /home/lynn/Documents/lezhong/sdk-3.7.1.3172-linux-x86_64-gcc/sdk-3.7.1/lib/release/lin-x86_64-gcc -ldrd -lpthread -lusb-1.0 -o wavesimple
+
+
