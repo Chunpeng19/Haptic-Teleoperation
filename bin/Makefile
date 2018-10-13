@@ -1,3 +1,9 @@
+#  (C) 2001-2018 Force Dimension
+#  All Rights Reserved.
+#
+#  Version 3.7.1
+
+
 # project structure
 TOP_DIR = .
 BIN_DIR = $(TOP_DIR)/bin

@@ -2,22 +2,6 @@
 #include <math.h>
 #include "functionfortele.h"
 
-#define N 3
-// parameters for velocity calculator
-#define PI 3.1415926
-#define FREQN 200
-#define zeta 0.9
-#define ALPHA 1.0e-1
-#define LAMDA 5.0e-4
-
-// parameter for wave velocity 
-#define BETA 1.0e-4
-
-#define DELAYCONSTMAX 8000
-
-#define DEFAULT_K 12.0  // 12.0
-
-
 // function for calculating velocity
 int velocityCalculator(double *v, double *vBack, double *vEst, double *j, double *jBack, double time) {
 	double omegan = 2 * PI * FREQN;		
