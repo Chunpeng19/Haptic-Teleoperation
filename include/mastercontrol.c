@@ -1,11 +1,5 @@
 #include "drd.h"
 #include <math.h>
-#include <iostream>
-#include <string>
-
-#define N 3
-#define DELAYCONSTMAX 8000
-#define CYCLETIME 0.137e-3
 
 // master's haptic loop
 void *masterControl(void *arg)

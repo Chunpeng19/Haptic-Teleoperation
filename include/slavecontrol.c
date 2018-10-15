@@ -1,11 +1,7 @@
-#include "drd.h"
+#include "drdc.h"
 #include <math.h>
-#include <iostream>
-#include <string>
-
-#define N 3
-#define DELAYCONSTMAX 8000
-#define CYCLETIME 0.137e-3
+#include "slavecontrol.h"
+#include "functionfortele.h"
 
 // slave's haptic loop
 void *slaveControl(void *arg)

@@ -6,8 +6,6 @@
 
 #define N 3
 #define CYCLETIME 0.137e-3 // 0.25e-3 for windows and 0.137 for linux
-#define CYCLETIMEUPPERLIMIT 0.3e-3
-#define CYCLETIMELOWERLIMIT 0.1e-5
 #define ENC 20300 // encoder reading corresponding to origin
 
 #define WAVEIMPEDANCE 0.16 // from 0.01 to 1.0; 0.05 is the min value to stablize the system at no-delay case 0.16
@@ -20,7 +18,7 @@
 #define DELAYCHANGESTEP 91
 #define DELAYCONSTMAX 8000
 
-#define ALPHA 1.0e-1 // velocity filter parameter
+#define ALPHA 0.8e-1 // velocity filter parameter
 #define BETA 1.0e-4 // wave velocity filter parameter
 #define LAMDA 5.0e-4
 

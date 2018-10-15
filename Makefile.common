@@ -26,7 +26,12 @@ BIN_DIR = $(TOP_DIR)/bin
 INC_DIR = $(TOP_DIR)/include
 LIB_DIR = $(TOP_DIR)/lib
 
+# matlab library
+MATLAB_DIR = /usr/local/MATLAB/R2018b/extern/include
+
 # common linker flags
 LDFLAGS += -L$(LIB_DIR)
+LDFLAGS	+= -L/usr/local/MATLAB/R2018b/bin/glnxa64
 LDLIBS  += -lpthread -lusb-1.0 -lrt -ldl
+LDLIBS	+= -leng -lmx -lmex -lmat
 

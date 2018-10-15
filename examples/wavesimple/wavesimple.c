@@ -11,8 +11,9 @@
 
 #include "drdc.h"
 #include "functionfortele.h"
+//#include "slavecontrol.h"
 
-//#include <engine.h>
+#include "engine.h"
 #include <iostream>
 #include <string>
 
@@ -331,7 +332,7 @@ main(int  argc,
 	dhdGetSerialNumber(&slavesn, slave);
 	printf("%s haptic device [sn: %04d] as master\n", dhdGetSystemName(master), mastersn);
 	printf("%s haptic device [sn: %04d] as slave\n\n", dhdGetSystemName(slave), slavesn);
-
+	
 	// center both devices
 	drdMoveToEnc(ENC, ENC, ENC, false, master);
 	drdMoveToEnc(ENC - 150, ENC, ENC, true, slave);
@@ -353,10 +354,12 @@ main(int  argc,
 
 	double curTime, refTime = dhdGetTime();
 
-	/*
+	
 	// open matlab engine
 	Engine *m_pEngine;
-	m_pEngine = engOpen("null");
+	if (!(m_pEngine = engOpen(""))) {
+		printf("Cannot start MATLAB engine\n");	
+	}
 
 	mxArray* dx = mxCreateDoubleMatrix(1, 1, mxREAL);
 	mxArray* dy = mxCreateDoubleMatrix(1, 1, mxREAL);
@@ -418,13 +421,13 @@ main(int  argc,
 	*spx = -sp[0];
 	*spy = sp[1];
 	*spz = sp[2];
-	*/
+	
 
 	printf("round trip delay    wave impedance \n");
 
 	// loop while the button is not pushed
 	while (!done) {
-		/*
+		
 		*lpz = *pz;
 		*lspz = *spz;
 		*lmfz = *mfz;
@@ -462,7 +465,7 @@ main(int  argc,
 		engEvalString(m_pEngine, "subplot(2,2,1),plot([lt,t],[ldz,dz],'b'),hold on,plot([lt,t],[lsdz,sdz],'r'),");
 		engEvalString(m_pEngine, "subplot(2,2,2),plot([lt,t],[lmforcez,mforcez],'b'),hold on,plot([lt,t],[-lsforcez,-sforcez],'r'),");
 		engEvalString(m_pEngine, "subplot(2,2,3),plot([lt,t],[abs(ldz-lsdz),abs(dz-sdz)],'b'),hold on,");
-		engEvalString(m_pEngine, "subplot(2,2,4),plot([lt,t],[abs(lmforcez+lsforcez),abs(mforcez+sforcez)],'r'),hold on,");*/
+		engEvalString(m_pEngine, "subplot(2,2,4),plot([lt,t],[abs(lmforcez+lsforcez),abs(mforcez+sforcez)],'r'),hold on,");
 
 		curTime = dhdGetTime();
 		if ((curTime - refTime) > 0.1) {
@@ -491,7 +494,7 @@ main(int  argc,
 		}
 
 	}
-	/*
+	
 	*td = 2 * 0.25*delayConst;
 	*kgain = Kp;
 	engPutVariable(m_pEngine, "delay", delay);
@@ -501,7 +504,7 @@ main(int  argc,
 	engEvalString(m_pEngine, "subplot(2,2,2),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
 	engEvalString(m_pEngine, "subplot(2,2,3),grid on,xlabel('time(s)'),ylabel('position(m)'),title(['master and slave z-position error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
 	engEvalString(m_pEngine, "subplot(2,2,4),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
-	*/
+	
 	// report exit cause
 	printf("                                                                           \r");
 	if (done == -1) printf("\nregulation finished abnormally on slave device\n");
