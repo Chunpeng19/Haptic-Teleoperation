@@ -18,13 +18,15 @@
 #define DELAYCHANGESTEP 91
 #define DELAYCONSTMAX 8000
 
-#define ALPHA 0.8e-1 // velocity filter parameter
+#define ALPHA 0.7e-1 // velocity filter parameter
 #define BETA 1.0e-4 // wave velocity filter parameter
 #define LAMDA 5.0e-4
 
 #define PI 3.1415926
 #define FREQN 3.0e2
-#define zeta 0.90
+#define ZETA 0.90
+
+#define VELOCITYTHRESHOLD 150
 
 /***********************/
 // Functions

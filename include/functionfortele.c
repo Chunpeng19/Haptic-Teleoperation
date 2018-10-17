@@ -6,9 +6,9 @@
 int velocityCalculator(double *v, double *vBack, double *vEst, double *j, double *jBack, double time) {
 	double omegan = 2 * PI * FREQN;		
 	double K = omegan / tan(omegan * time / 2);	
-	double a0 = K * K + 4 * K * zeta * omegan + omegan * omegan;
+	double a0 = K * K + 4 * K * ZETA * omegan + omegan * omegan;
 	double a1 = 2 * omegan * omegan - 2 * K * K;
-	double a2 = K * K - 4 * K * zeta * omegan + omegan * omegan;
+	double a2 = K * K - 4 * K * ZETA * omegan + omegan * omegan;
 	double b0 = omegan * omegan;
 	double b1 = 2 * omegan * omegan;
 	double b2 = omegan * omegan;

@@ -13,7 +13,7 @@
 #include "functionfortele.h"
 //#include "slavecontrol.h"
 
-#include "engine.h"
+///#include "engine.h"
 #include <iostream>
 #include <string>
 
@@ -102,10 +102,6 @@ void *masterThread(void *arg)
 		}
 	}
 
-	// sync start time for control loop
-	mIndex = 1;
-	while (!sIndex)
-
 	mLastTempTime = dhdGetTime();
 
 	while (!done) {
@@ -113,8 +109,12 @@ void *masterThread(void *arg)
 		mTotalTime = delayConst * CYCLETIME;
 
 		// get anglular position and velocity
-		dhdGetDeltaJointAngles(&mj[0], &mj[1], &mj[2], master);
-		dhdDeltaGravityJointTorques(mj[0], mj[1], mj[2], &mq[0], &mq[1], &mq[2], master);
+		if(dhdGetDeltaJointAngles(&mj[0], &mj[1], &mj[2], master) < DHD_NO_ERROR) {
+			printf("error: cannot get joint angles (%s)\n", dhdErrorGetLastStr ());
+		}
+		if(dhdDeltaGravityJointTorques(mj[0], mj[1], mj[2], &mq[0], &mq[1], &mq[2], master) < DHD_NO_ERROR) {
+			printf("error: cannot get compensated gravity joint torques (%s)\n", dhdErrorGetLastStr ());
+		}
 		
 		// calculate loop time
 		mTempTime = dhdGetTime();
@@ -131,10 +131,14 @@ void *masterThread(void *arg)
 		masterWaveDecodeEncode(um, vm, vmv, vsDelay, mt, mv, sTotalTime, b);		
 		
 		// set joint torque
-		dhdSetDeltaJointTorques(mt[0] + mq[0], mt[1] + mq[1], mt[2] + mq[2], master);
+		if(dhdSetDeltaJointTorques(mt[0] + mq[0], mt[1] + mq[1], mt[2] + mq[2], master) < DHD_NO_ERROR) {
+			printf("error: cannot set joint torques (%s)\n", dhdErrorGetLastStr ());
+		}
 
 		// get Cartesian position
-		dhdGetPosition(&mp[0], &mp[1], &mp[2], master);
+		if(dhdGetPosition(&mp[0], &mp[1], &mp[2], master) < DHD_NO_ERROR) {
+			printf("error: cannot get position (%s)\n", dhdErrorGetLastStr ());
+		}
 
 		// set backward wave
 		delayMimic(umDelay, umBack, um, mDelayIndex, delayConst);
@@ -145,8 +149,11 @@ void *masterThread(void *arg)
 
 	}
 
+	printf("master thread stop\n");
+
 	// close the connection
 	//drdClose(master);
+	mIndex = 1;
 	return NULL;
 }
 
@@ -189,10 +196,6 @@ void *slaveThread(void *arg)
 		sjdBack[i] = sj[i];
 	}
 
-
-	sIndex = 1;
-	while (!mIndex)
-
 	sLastTempTime = dhdGetTime();
 
 	// loop while the button is not pushed
@@ -201,8 +204,12 @@ void *slaveThread(void *arg)
 		sTotalTime = delayConst * CYCLETIME;
 
 		// get position and velocity
-		dhdGetDeltaJointAngles(&sj[0], &sj[1], &sj[2], slave);
-		dhdDeltaGravityJointTorques(sj[0], sj[1], sj[2], &sq[0], &sq[1], &sq[2], slave);
+		if(dhdGetDeltaJointAngles(&sj[0], &sj[1], &sj[2], slave) < DHD_NO_ERROR) {
+			printf("error: cannot get joint angles (%s)\n", dhdErrorGetLastStr ());
+		}
+		if(dhdDeltaGravityJointTorques(sj[0], sj[1], sj[2], &sq[0], &sq[1], &sq[2], slave) < DHD_NO_ERROR) {
+			printf("error: cannot get compensated gravity joint torques (%s)\n", dhdErrorGetLastStr ());
+		}
 		
 		// calculate loop time
 		sTempTime = dhdGetTime();
@@ -219,10 +226,14 @@ void *slaveThread(void *arg)
 		slaveWaveDecodeEncode(us, vs, usv, umDelay, st, sv, sj, svd, sjd, sjdBack, mjDelay, sCycleTime, mTotalTime, b);
 		
 		// set joint torque
-		dhdSetDeltaJointTorques(st[0] + sq[0], st[1] + sq[1], st[2] + sq[2], slave);
+		if(dhdSetDeltaJointTorques(st[0] + sq[0], st[1] + sq[1], st[2] + sq[2], slave) < DHD_NO_ERROR) {
+			printf("error: cannot set joint torques (%s)\n", dhdErrorGetLastStr ());
+		}
 		
 		// get Cartisian position
-		dhdGetPosition(&sp[0], &sp[1], &sp[2], slave);
+		if(dhdGetPosition(&sp[0], &sp[1], &sp[2], slave) < DHD_NO_ERROR) {
+			printf("error: cannot get position (%s)\n", dhdErrorGetLastStr ());
+		}
 
 		// set backward position and velocity
 		delayMimic(usDelay, usBack, us, sDelayIndex, delayConst);
@@ -232,9 +243,12 @@ void *slaveThread(void *arg)
 
 
 	}
+	
+	printf("slave thread stop\n");
 
 	// close the connection
 	//drdClose(slave);
+	sIndex = 1;
 	return NULL;
 }
 
@@ -244,6 +258,8 @@ main(int  argc,
 {
 	int    master, slave;
 	double timeDelay;
+	uint masterVelocityThreshold;
+	uint slaveVelocityThreshold;
 
 	// message
 	int major, minor, release, revision;
@@ -345,6 +361,14 @@ main(int  argc,
 	dhdSetForce(0.0, 0.0, 0.0, slave);
 
 	dhdEnableExpertMode();
+	
+	// read and change velocity threshold
+	dhdGetVelocityThreshold(&masterVelocityThreshold, master);
+	dhdGetVelocityThreshold(&slaveVelocityThreshold, slave);
+	masterVelocityThreshold = VELOCITYTHRESHOLD;
+	slaveVelocityThreshold = VELOCITYTHRESHOLD;
+	dhdSetVelocityThreshold(masterVelocityThreshold, master);
+	dhdSetVelocityThreshold(slaveVelocityThreshold, slave);	
 
 	// start slave's haptic loop
 	dhdStartThread(slaveThread, &slave, DHD_THREAD_PRIORITY_DEFAULT);
@@ -354,7 +378,7 @@ main(int  argc,
 
 	double curTime, refTime = dhdGetTime();
 
-	
+	/*
 	// open matlab engine
 	Engine *m_pEngine;
 	if (!(m_pEngine = engOpen(""))) {
@@ -420,14 +444,14 @@ main(int  argc,
 	*pz = mp[2];
 	*spx = -sp[0];
 	*spy = sp[1];
-	*spz = sp[2];
+	*spz = sp[2];*/
 	
 
 	printf("round trip delay    wave impedance \n");
 
 	// loop while the button is not pushed
 	while (!done) {
-		
+		/*
 		*lpz = *pz;
 		*lspz = *spz;
 		*lmfz = *mfz;
@@ -465,7 +489,7 @@ main(int  argc,
 		engEvalString(m_pEngine, "subplot(2,2,1),plot([lt,t],[ldz,dz],'b'),hold on,plot([lt,t],[lsdz,sdz],'r'),");
 		engEvalString(m_pEngine, "subplot(2,2,2),plot([lt,t],[lmforcez,mforcez],'b'),hold on,plot([lt,t],[-lsforcez,-sforcez],'r'),");
 		engEvalString(m_pEngine, "subplot(2,2,3),plot([lt,t],[abs(ldz-lsdz),abs(dz-sdz)],'b'),hold on,");
-		engEvalString(m_pEngine, "subplot(2,2,4),plot([lt,t],[abs(lmforcez+lsforcez),abs(mforcez+sforcez)],'r'),hold on,");
+		engEvalString(m_pEngine, "subplot(2,2,4),plot([lt,t],[abs(lmforcez+lsforcez),abs(mforcez+sforcez)],'r'),hold on,");*/
 
 		curTime = dhdGetTime();
 		if ((curTime - refTime) > 0.1) {
@@ -475,11 +499,12 @@ main(int  argc,
 			timeDelay = (mTotalTime + sTotalTime)*1.0e3;
 
 			// retrieve information to display
-			//printf("%+0.03f %+0.03f %+0.03f | ", mj[0], mj[1], mj[2]);
-			//printf("%+0.03f %+0.03f %+0.03f | ", sj[0], sj[1], sj[2]);
-			printf("tau_rt = %0.02f [ms] | ", timeDelay);
-			printf("b = %0.03f | ", b);
-			printf("mf = %0.03f [kHz] | sf = %0.03f [kHz] \r", dhdGetComFreq(0), dhdGetComFreq(1));
+			//printf("%+0.03f %+0.03f %+0.03f | ", mp[0], mj[1], mj[2]);
+			printf("%4d %4d \r", masterVelocityThreshold, slaveVelocityThreshold);
+			//printf("%+0.03f %+0.03f %+0.03f | \r", sp[0], sj[1], sj[2]);
+			//printf("tau_rt = %0.02f [ms] | ", timeDelay);
+			//printf("b = %0.03f | ", b);
+			//printf("mf = %0.03f [kHz] | sf = %0.03f [kHz] \r", dhdGetComFreq(0), dhdGetComFreq(1));
 
 			if (dhdGetButtonMask(master)) done = 1;
 			if (dhdKbHit()) {
@@ -494,7 +519,7 @@ main(int  argc,
 		}
 
 	}
-	
+	/*
 	*td = 2 * 0.25*delayConst;
 	*kgain = Kp;
 	engPutVariable(m_pEngine, "delay", delay);
@@ -504,7 +529,7 @@ main(int  argc,
 	engEvalString(m_pEngine, "subplot(2,2,2),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
 	engEvalString(m_pEngine, "subplot(2,2,3),grid on,xlabel('time(s)'),ylabel('position(m)'),title(['master and slave z-position error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
 	engEvalString(m_pEngine, "subplot(2,2,4),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
-	
+*/	
 	// report exit cause
 	printf("                                                                           \r");
 	if (done == -1) printf("\nregulation finished abnormally on slave device\n");
