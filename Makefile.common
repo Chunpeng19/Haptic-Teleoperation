@@ -9,8 +9,7 @@ CXX     ?= g++
 COMPILER = $(CC)
 
 # common compiler flags
-CXXFLAGS = -O3 -DLINUX -std=c++0x -I$(INC_DIR) -fsigned-char
-# -I$(MATLAB_DIR)
+CXXFLAGS = -O3 -DLINUX -std=c++0x -I$(INC_DIR) -I$(MATLAB_DIR) -fsigned-char
 
 # set target architecture
 ifeq ($(ARCH), x86_64)
@@ -28,11 +27,11 @@ INC_DIR = $(TOP_DIR)/include
 LIB_DIR = $(TOP_DIR)/lib
 
 # matlab library
-# MATLAB_DIR = /usr/local/MATLAB/R2018b/extern/include
+MATLAB_DIR = /usr/local/MATLAB/R2017a/extern/include
 
 # common linker flags
 LDFLAGS += -L$(LIB_DIR)
-# LDFLAGS	+= -L/usr/local/MATLAB/R2018b/bin/glnxa64
+LDFLAGS	+= -L/usr/local/MATLAB/R2017a/bin/glnxa64
 LDLIBS  += -lpthread -lusb-1.0 -lrt -ldl
-# LDLIBS	+= -leng -lmx -lmex -lmat
+LDLIBS	+= -leng -lmx -lmex -lmat
 

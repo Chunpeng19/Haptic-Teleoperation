@@ -24,7 +24,7 @@
 
 #define PI 3.1415926
 #define FREQN 3.0e2
-#define ZETA 0.90
+#define ZETA 0.707
 
 #define VELOCITYTHRESHOLD 150
 

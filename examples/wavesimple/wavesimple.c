@@ -13,7 +13,7 @@
 #include "functionfortele.h"
 //#include "slavecontrol.h"
 
-///#include "engine.h"
+#include "engine.h"
 #include <iostream>
 #include <string>
 
@@ -53,14 +53,14 @@ double b = WAVEIMPEDANCE;
 int delayConst = DELAYCONST;
 
 double mTotalTime = 0.0;
-int mIndex = 0;
 
 double sTotalTime = 0.0;
-int sIndex = 0;
 
-double omegan = 2 * PI * FREQN;
+//double omegan = 2 * PI * FREQN;
 
 double mjBack[DELAYCONSTMAX * N]; // core dumping reason to make it global
+
+double mt[N];
 
 // master's haptic loop
 void *masterThread(void *arg)
@@ -74,7 +74,7 @@ void *masterThread(void *arg)
 	double vmv[N] = { 0.0 };
 	double vmvBack[N] = { 0.0 };
 
-	double mt[N];
+	//double mt[N];
 	double mq[N];
 
 	double mTempTime;
@@ -153,7 +153,6 @@ void *masterThread(void *arg)
 
 	// close the connection
 	//drdClose(master);
-	mIndex = 1;
 	return NULL;
 }
 
@@ -248,7 +247,6 @@ void *slaveThread(void *arg)
 
 	// close the connection
 	//drdClose(slave);
-	sIndex = 1;
 	return NULL;
 }
 
@@ -378,7 +376,6 @@ main(int  argc,
 
 	double curTime, refTime = dhdGetTime();
 
-	/*
 	// open matlab engine
 	Engine *m_pEngine;
 	if (!(m_pEngine = engOpen(""))) {
@@ -435,23 +432,19 @@ main(int  argc,
 	double mfy, mfx;
 	double sfy, sfx;
 
-	while (!(mIndex&&sIndex)) {
-
-	}
-
 	*px = -mp[0];
 	*py = mp[1];
 	*pz = mp[2];
 	*spx = -sp[0];
 	*spy = sp[1];
-	*spz = sp[2];*/
+	*spz = sp[2];
 	
 
 	printf("round trip delay    wave impedance \n");
 
 	// loop while the button is not pushed
 	while (!done) {
-		/*
+
 		*lpz = *pz;
 		*lspz = *spz;
 		*lmfz = *mfz;
@@ -489,7 +482,7 @@ main(int  argc,
 		engEvalString(m_pEngine, "subplot(2,2,1),plot([lt,t],[ldz,dz],'b'),hold on,plot([lt,t],[lsdz,sdz],'r'),");
 		engEvalString(m_pEngine, "subplot(2,2,2),plot([lt,t],[lmforcez,mforcez],'b'),hold on,plot([lt,t],[-lsforcez,-sforcez],'r'),");
 		engEvalString(m_pEngine, "subplot(2,2,3),plot([lt,t],[abs(ldz-lsdz),abs(dz-sdz)],'b'),hold on,");
-		engEvalString(m_pEngine, "subplot(2,2,4),plot([lt,t],[abs(lmforcez+lsforcez),abs(mforcez+sforcez)],'r'),hold on,");*/
+		engEvalString(m_pEngine, "subplot(2,2,4),plot([lt,t],[abs(lmforcez+lsforcez),abs(mforcez+sforcez)],'r'),hold on,");
 
 		curTime = dhdGetTime();
 		if ((curTime - refTime) > 0.1) {
@@ -499,12 +492,11 @@ main(int  argc,
 			timeDelay = (mTotalTime + sTotalTime)*1.0e3;
 
 			// retrieve information to display
-			//printf("%+0.03f %+0.03f %+0.03f | ", mp[0], mj[1], mj[2]);
-			printf("%4d %4d \r", masterVelocityThreshold, slaveVelocityThreshold);
+			//printf("%+0.03f %+0.03f %+0.03f | ", mt[0], mt[1], mt[2]);
 			//printf("%+0.03f %+0.03f %+0.03f | \r", sp[0], sj[1], sj[2]);
-			//printf("tau_rt = %0.02f [ms] | ", timeDelay);
-			//printf("b = %0.03f | ", b);
-			//printf("mf = %0.03f [kHz] | sf = %0.03f [kHz] \r", dhdGetComFreq(0), dhdGetComFreq(1));
+			printf("tau_rt = %0.02f [ms] | ", timeDelay);
+			printf("b = %0.03f | ", b);
+			printf("mf = %0.03f [kHz] | sf = %0.03f [kHz] \r", dhdGetComFreq(0), dhdGetComFreq(1));
 
 			if (dhdGetButtonMask(master)) done = 1;
 			if (dhdKbHit()) {
@@ -519,7 +511,7 @@ main(int  argc,
 		}
 
 	}
-	/*
+
 	*td = 2 * 0.25*delayConst;
 	*kgain = Kp;
 	engPutVariable(m_pEngine, "delay", delay);
@@ -529,7 +521,7 @@ main(int  argc,
 	engEvalString(m_pEngine, "subplot(2,2,2),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
 	engEvalString(m_pEngine, "subplot(2,2,3),grid on,xlabel('time(s)'),ylabel('position(m)'),title(['master and slave z-position error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
 	engEvalString(m_pEngine, "subplot(2,2,4),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
-*/	
+	
 	// report exit cause
 	printf("                                                                           \r");
 	if (done == -1) printf("\nregulation finished abnormally on slave device\n");

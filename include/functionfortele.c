@@ -16,8 +16,8 @@ int velocityCalculator(double *v, double *vBack, double *vEst, double *j, double
 	for (int i = 0; i < N; i++) {
 		vEst[i] = (j[i] - jBack[i]) / time;
 		jBack[i] = j[i];
-		//v[i] = (b0 * vEst[i] + b1 * vEst[N + i] + b2 * vEst[2 * N + i] - a1 * vBack[i] - a2 * vBack[N + i]) / a0;
-		v[i] = vEst[i] * ALPHA + vBack[i] * (1 - ALPHA);
+		v[i] = (b0 * vEst[i] + b1 * vEst[N + i] + b2 * vEst[2 * N + i] - a1 * vBack[i] - a2 * vBack[N + i]) / a0;
+		//v[i] = vEst[i] * ALPHA + vBack[i] * (1 - ALPHA);
 		vBack[N + i] = vBack[i];
 		vBack[i] = v[i];
 		vEst[2 * N + i]	= vEst[N + i];
