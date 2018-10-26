@@ -1,6 +1,0 @@
-g++  wavesimple.c -I /home/lynn/Documents/chunpeng/Haptic-Teleoperation/include -L /home/lynn/Documents/chunpeng/Haptic-Teleoperation/lib -ldrd -lpthread -lusb-1.0 -o wavesimple
-
-gcc /home/lynn/Documents/chunpeng/Haptic-Teleoperation/include/functionfortele.o /home/lynn/Documents/chunpeng/Haptic-Teleoperation/wavesimple.o -I /home/lynn/Documents/chunpeng/Haptic-Teleoperation/include -L /home/lynn/Documents/chunpeng/Haptic-Teleoperation/lib -ldrd -lpthread -lusb-1.0 -o wavesimple
-
-
-

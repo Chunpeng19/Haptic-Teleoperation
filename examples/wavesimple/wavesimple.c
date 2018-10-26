@@ -16,6 +16,7 @@
 #include <iostream>
 #include <string>
 #include <pthread.h>
+#include <sched.h>
 
 //#pragma comment ( lib, "libmx.lib" )
 //#pragma comment ( lib, "libeng.lib" )
@@ -158,7 +159,7 @@ void *masterThread(void *arg)
 
 
 // slave's haptic loop
-void *plotThread(void *arg)
+void *slaveThread(void *arg)
 {
 	// retrieve the device index as argument
 	int slave = *((int*)arg);
@@ -251,7 +252,7 @@ void *plotThread(void *arg)
 }
 
 // plot loop
-void *slaveThread(void *arg)
+void *plotThread(void *arg)
 {
 	// open matlab engine
 	Engine *m_pEngine;
@@ -509,7 +510,7 @@ main(int  argc,
 		fprintf(stderr, "Error creating thread\n");
 		done = 1;	
 	}
-/*
+
 	cpu_set_t cpu0, cpu1;
 	int temp;
 	
@@ -524,7 +525,7 @@ main(int  argc,
 	printf("setaffinity = %d \n", temp);
 
 	temp = pthread_setaffinity_np(control_thread_slave, sizeof(cpu_set_t), &cpu1);
-	printf("setaffinity = %d \n", temp);*/
+	printf("setaffinity = %d \n", temp);
 
 	double curTime, refTime = dhdGetTime();
 
