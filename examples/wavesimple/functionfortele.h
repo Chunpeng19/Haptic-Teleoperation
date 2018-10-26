@@ -8,12 +8,12 @@
 #define CYCLETIME 0.137e-3 // 0.25e-3 for windows and 0.137 for linux
 #define ENC 20300 // encoder reading corresponding to origin
 
-#define WAVEIMPEDANCE 0.16 // from 0.01 to 1.0; 0.05 is the min value to stablize the system at no-delay case 0.16
+#define WAVEIMPEDANCE 0.10 // from 0.01 to 1.0; 0.05 is the min value to stablize the system at no-delay case 0.16
 #define MAXWAVEIMPEDANCE 0.30
-#define MINWAVEIMPEDANCE 0.01
+#define MINWAVEIMPEDANCE 0.05
 #define WAVEIMPEDANCESTEP 0.01
 
-#define DEFAULT_K 12.0  // 12.0
+#define DEFAULT_K 6.0  // 12.0
 #define DELAYCONST 1 // one-way delay equals to delayconst*cycletime
 #define DELAYCHANGESTEP 91
 #define DELAYCONSTMAX 8000
@@ -23,7 +23,7 @@
 #define LAMDA 5.0e-4
 
 #define PI 3.1415926
-#define FREQN 3.0e2
+#define FREQN 1.0e2
 #define ZETA 0.707
 
 #define VELOCITYTHRESHOLD 150

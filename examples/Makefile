@@ -3,7 +3,8 @@ TOP_DIR = ..
 include $(TOP_DIR)/Makefile.common
 
 # haptic examples
-SUBDIRS += wavesimple
+SUBDIRS += wavesimple \
+	passivecontrol
 
 
 all: $(SUBDIRS)

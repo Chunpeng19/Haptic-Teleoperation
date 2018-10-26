@@ -12,7 +12,7 @@ OBJ_DIR   = .
 # definitions
 SOURCES   = $(wildcard $(SRC_DIR)/*.c)
 INCLUDES  = $(wildcard $(INC_DIR)/*.h)
-INCLUDESF = $(wildcard $(INC_DIR)/*.o)
+INCLUDESF = $(wildcard $(SRC_DIR)/*.h)
 INCLUDESM = $(wildcard $(MATLAB_DIR)/*.h)
 OBJECTS   = $(patsubst %.c, $(OBJ_DIR)/%.o, $(notdir $(SOURCES)))
 NAME      = $(notdir $(shell pwd)) 
@@ -24,7 +24,7 @@ all: $(TARGET)
 $(OBJECTS): $(SOURCES) $(INCLUDES) $(INCLUDESM)
 
 $(TARGET): $(OBJ_DIR) $(DRD_LIB_STATIC) $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LDFLAGS) $(LDLIBS) $(INCLUDESF) -o $(TARGET)
+	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LDFLAGS) $(LDLIBS) -o $(TARGET)
 
 $(OBJ_DIR):
 	mkdir -p $@

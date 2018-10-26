@@ -1,8 +1,3 @@
-//  (C) 2001-2015 Force Dimension
-//  All Rights Reserved.
-//
-//  Version 3.6.0
-
 #include <stdio.h>
 #include <stdlib.h>
 #define _USE_MATH_DEFINES

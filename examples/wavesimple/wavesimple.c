@@ -11,11 +11,11 @@
 
 #include "drdc.h"
 #include "functionfortele.h"
-//#include "slavecontrol.h"
 
 #include "engine.h"
 #include <iostream>
 #include <string>
+#include <pthread.h>
 
 //#pragma comment ( lib, "libmx.lib" )
 //#pragma comment ( lib, "libeng.lib" )
@@ -150,7 +150,7 @@ void *masterThread(void *arg)
 	}
 
 	printf("master thread stop\n");
-
+	pthread_exit(NULL);
 	// close the connection
 	//drdClose(master);
 	return NULL;
@@ -158,7 +158,7 @@ void *masterThread(void *arg)
 
 
 // slave's haptic loop
-void *slaveThread(void *arg)
+void *plotThread(void *arg)
 {
 	// retrieve the device index as argument
 	int slave = *((int*)arg);
@@ -244,10 +244,132 @@ void *slaveThread(void *arg)
 	}
 	
 	printf("slave thread stop\n");
-
+	pthread_exit(NULL);
 	// close the connection
 	//drdClose(slave);
 	return NULL;
+}
+
+// plot loop
+void *slaveThread(void *arg)
+{
+	// open matlab engine
+	Engine *m_pEngine;
+	if (!(m_pEngine = engOpen(""))) {
+		printf("Cannot start MATLAB engine\n");	
+	}
+
+	mxArray* dx = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* dy = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* dz = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* sdx = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* sdy = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* sdz = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* time = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* mforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* sforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
+
+	mxArray* ldx = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* ldy = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* ldz = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* lsdx = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* lsdy = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* lsdz = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* ltime = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* lmforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* lsforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
+
+	mxArray* delay = mxCreateDoubleMatrix(1, 1, mxREAL);
+	mxArray* kpgain = mxCreateDoubleMatrix(1, 1, mxREAL);
+
+	double* px = mxGetPr(dx);
+	double* py = mxGetPr(dy);
+	double* pz = mxGetPr(dz);
+	double* spx = mxGetPr(sdx);
+	double* spy = mxGetPr(sdy);
+	double* spz = mxGetPr(sdz);
+	double* t = mxGetPr(time);
+	double* mfz = mxGetPr(mforcez);
+	double* sfz = mxGetPr(sforcez);
+
+	double* lpx = mxGetPr(ldx);
+	double* lpy = mxGetPr(ldy);
+	double* lpz = mxGetPr(ldz);
+	double* lspx = mxGetPr(lsdx);
+	double* lspy = mxGetPr(lsdy);
+	double* lspz = mxGetPr(lsdz);
+	double* lt = mxGetPr(ltime);
+	double* lmfz = mxGetPr(lmforcez);
+	double* lsfz = mxGetPr(lsforcez);
+
+	double* td = mxGetPr(delay);
+	double* kgain = mxGetPr(kpgain);
+
+	double t1 = dhdGetTime();
+	double mfy, mfx;
+	double sfy, sfx;
+
+	*px = -mp[0];
+	*py = mp[1];
+	*pz = mp[2];
+	*spx = -sp[0];
+	*spy = sp[1];
+	*spz = sp[2];
+
+	while(!done) {
+	
+		*lpz = *pz;
+		*lspz = *spz;
+		*lmfz = *mfz;
+		*lsfz = *sfz;
+		*lt = *t;
+
+		engPutVariable(m_pEngine, "ldz", ldz);
+		engPutVariable(m_pEngine, "lsdz", lsdz);
+
+		engPutVariable(m_pEngine, "lmforcez", lmforcez);
+		engPutVariable(m_pEngine, "lsforcez", lsforcez);
+
+		engPutVariable(m_pEngine, "lt", ltime);
+
+		dhdGetForce(&mfx, &mfy, mfz, 0);
+		dhdGetForce(&sfx, &sfy, sfz, 1);
+
+		// matlab plot
+		*px = -mp[0];
+		*py = mp[1];
+		*pz = mp[2];
+		*spx = -sp[0];
+		*spy = sp[1];
+		*spz = sp[2];
+
+		engPutVariable(m_pEngine, "dz", dz);
+		engPutVariable(m_pEngine, "sdz", sdz);
+
+		engPutVariable(m_pEngine, "mforcez", mforcez);
+		engPutVariable(m_pEngine, "sforcez", sforcez);
+
+		*t = dhdGetTime() - t1;
+		engPutVariable(m_pEngine, "t", time);
+		
+		engEvalString(m_pEngine, "subplot(2,2,1),plot([lt,t],[ldz,dz],'b'),hold on,plot([lt,t],[lsdz,sdz],'r'),");
+		engEvalString(m_pEngine, "subplot(2,2,2),plot([lt,t],[lmforcez,mforcez],'b'),hold on,plot([lt,t],[-lsforcez,-sforcez],'r'),");
+		engEvalString(m_pEngine, "subplot(2,2,3),plot([lt,t],[abs(ldz-lsdz),abs(dz-sdz)],'b'),hold on,");
+		engEvalString(m_pEngine, "subplot(2,2,4),plot([lt,t],[abs(lmforcez+lsforcez),abs(mforcez+sforcez)],'r'),hold on,");	
+	}
+
+	*td = 2 * 0.25*delayConst;
+	*kgain = Kp;
+	engPutVariable(m_pEngine, "delay", delay);
+	engPutVariable(m_pEngine, "kpgain", kpgain);
+
+	engEvalString(m_pEngine, "subplot(2,2,1),grid on,xlabel('time(s)'),ylabel('position(m)'),title(['master and slave z-position: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
+	engEvalString(m_pEngine, "subplot(2,2,2),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
+	engEvalString(m_pEngine, "subplot(2,2,3),grid on,xlabel('time(s)'),ylabel('position(m)'),title(['master and slave z-position error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
+	engEvalString(m_pEngine, "subplot(2,2,4),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
+
+	pthread_exit(NULL);
+
 }
 
 int
@@ -363,126 +485,53 @@ main(int  argc,
 	// read and change velocity threshold
 	dhdGetVelocityThreshold(&masterVelocityThreshold, master);
 	dhdGetVelocityThreshold(&slaveVelocityThreshold, slave);
+
 	masterVelocityThreshold = VELOCITYTHRESHOLD;
 	slaveVelocityThreshold = VELOCITYTHRESHOLD;
+
 	dhdSetVelocityThreshold(masterVelocityThreshold, master);
 	dhdSetVelocityThreshold(slaveVelocityThreshold, slave);	
 
-	// start slave's haptic loop
-	dhdStartThread(slaveThread, &slave, DHD_THREAD_PRIORITY_DEFAULT);
-
-	// start mastr's haptic loop
-	dhdStartThread(masterThread, &master, DHD_THREAD_PRIORITY_DEFAULT);
-
-	double curTime, refTime = dhdGetTime();
-
-	// open matlab engine
-	Engine *m_pEngine;
-	if (!(m_pEngine = engOpen(""))) {
-		printf("Cannot start MATLAB engine\n");	
+	// thread create
+	pthread_t control_thread_master, control_thread_slave, plot_thread;
+	
+	if(pthread_create(&control_thread_master, NULL, masterThread, &master)) {
+		fprintf(stderr, "Error creating thread\n");
+		done = 1;	
 	}
 
-	mxArray* dx = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* dy = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* dz = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* sdx = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* sdy = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* sdz = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* time = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* mforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* sforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
+	if(pthread_create(&control_thread_slave, NULL, slaveThread, &slave)) {
+		fprintf(stderr, "Error creating thread\n");
+		done = 1;	
+	}
 
-	mxArray* ldx = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* ldy = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* ldz = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* lsdx = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* lsdy = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* lsdz = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* ltime = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* lmforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* lsforcez = mxCreateDoubleMatrix(1, 1, mxREAL);
-
-	mxArray* delay = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* kpgain = mxCreateDoubleMatrix(1, 1, mxREAL);
-
-	double* px = mxGetPr(dx);
-	double* py = mxGetPr(dy);
-	double* pz = mxGetPr(dz);
-	double* spx = mxGetPr(sdx);
-	double* spy = mxGetPr(sdy);
-	double* spz = mxGetPr(sdz);
-	double* t = mxGetPr(time);
-	double* mfz = mxGetPr(mforcez);
-	double* sfz = mxGetPr(sforcez);
-
-	double* lpx = mxGetPr(ldx);
-	double* lpy = mxGetPr(ldy);
-	double* lpz = mxGetPr(ldz);
-	double* lspx = mxGetPr(lsdx);
-	double* lspy = mxGetPr(lsdy);
-	double* lspz = mxGetPr(lsdz);
-	double* lt = mxGetPr(ltime);
-	double* lmfz = mxGetPr(lmforcez);
-	double* lsfz = mxGetPr(lsforcez);
-
-	double* td = mxGetPr(delay);
-	double* kgain = mxGetPr(kpgain);
-
-	double t1 = dhdGetTime();
-	double mfy, mfx;
-	double sfy, sfx;
-
-	*px = -mp[0];
-	*py = mp[1];
-	*pz = mp[2];
-	*spx = -sp[0];
-	*spy = sp[1];
-	*spz = sp[2];
+	if(pthread_create(&plot_thread, NULL, plotThread, NULL)) {
+		fprintf(stderr, "Error creating thread\n");
+		done = 1;	
+	}
+/*
+	cpu_set_t cpu0, cpu1;
+	int temp;
 	
+	CPU_ZERO(&cpu0);
+	CPU_SET(0, &cpu0);
+	temp = pthread_setaffinity_np(plot_thread, sizeof(cpu_set_t), &cpu0);
+	printf("setaffinity = %d \n", temp);
+
+	CPU_ZERO(&cpu1);
+	CPU_SET(1, &cpu1);
+	temp = pthread_setaffinity_np(control_thread_master, sizeof(cpu_set_t), &cpu1);
+	printf("setaffinity = %d \n", temp);
+
+	temp = pthread_setaffinity_np(control_thread_slave, sizeof(cpu_set_t), &cpu1);
+	printf("setaffinity = %d \n", temp);*/
+
+	double curTime, refTime = dhdGetTime();
 
 	printf("round trip delay    wave impedance \n");
 
 	// loop while the button is not pushed
-	while (!done) {
-
-		*lpz = *pz;
-		*lspz = *spz;
-		*lmfz = *mfz;
-		*lsfz = *sfz;
-		*lt = *t;
-
-		engPutVariable(m_pEngine, "ldz", ldz);
-		engPutVariable(m_pEngine, "lsdz", lsdz);
-
-		engPutVariable(m_pEngine, "lmforcez", lmforcez);
-		engPutVariable(m_pEngine, "lsforcez", lsforcez);
-
-		engPutVariable(m_pEngine, "lt", ltime);
-
-		dhdGetForce(&mfx, &mfy, mfz, master);
-		dhdGetForce(&sfx, &sfy, sfz, slave);
-
-		// matlab plot
-		*px = -mp[0];
-		*py = mp[1];
-		*pz = mp[2];
-		*spx = -sp[0];
-		*spy = sp[1];
-		*spz = sp[2];
-
-		engPutVariable(m_pEngine, "dz", dz);
-		engPutVariable(m_pEngine, "sdz", sdz);
-
-		engPutVariable(m_pEngine, "mforcez", mforcez);
-		engPutVariable(m_pEngine, "sforcez", sforcez);
-
-		*t = dhdGetTime() - t1;
-		engPutVariable(m_pEngine, "t", time);
-		
-		engEvalString(m_pEngine, "subplot(2,2,1),plot([lt,t],[ldz,dz],'b'),hold on,plot([lt,t],[lsdz,sdz],'r'),");
-		engEvalString(m_pEngine, "subplot(2,2,2),plot([lt,t],[lmforcez,mforcez],'b'),hold on,plot([lt,t],[-lsforcez,-sforcez],'r'),");
-		engEvalString(m_pEngine, "subplot(2,2,3),plot([lt,t],[abs(ldz-lsdz),abs(dz-sdz)],'b'),hold on,");
-		engEvalString(m_pEngine, "subplot(2,2,4),plot([lt,t],[abs(lmforcez+lsforcez),abs(mforcez+sforcez)],'r'),hold on,");
+	while (!done) {		
 
 		curTime = dhdGetTime();
 		if ((curTime - refTime) > 0.1) {
@@ -511,16 +560,6 @@ main(int  argc,
 		}
 
 	}
-
-	*td = 2 * 0.25*delayConst;
-	*kgain = Kp;
-	engPutVariable(m_pEngine, "delay", delay);
-	engPutVariable(m_pEngine, "kpgain", kpgain);
-
-	engEvalString(m_pEngine, "subplot(2,2,1),grid on,xlabel('time(s)'),ylabel('position(m)'),title(['master and slave z-position: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
-	engEvalString(m_pEngine, "subplot(2,2,2),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
-	engEvalString(m_pEngine, "subplot(2,2,3),grid on,xlabel('time(s)'),ylabel('position(m)'),title(['master and slave z-position error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
-	engEvalString(m_pEngine, "subplot(2,2,4),grid on,xlabel('time(s)'),ylabel('force(N)'),title(['master and slave z-force error: tau_{rt} =' num2str(delay) 'ms, kp = ' num2str(kpgain) 'N*m/rad']),");
 	
 	// report exit cause
 	printf("                                                                           \r");
