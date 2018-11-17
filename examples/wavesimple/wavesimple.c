@@ -505,15 +505,15 @@ main(int  argc,
 		fprintf(stderr, "Error creating thread\n");
 		done = 1;	
 	}
-
+/*
 	if(pthread_create(&plot_thread, NULL, plotThread, NULL)) {
 		fprintf(stderr, "Error creating thread\n");
 		done = 1;	
-	}
+	}*/
 
 	cpu_set_t cpu0, cpu1;
 	int temp;
-	
+/*	
 	CPU_ZERO(&cpu0);
 	CPU_SET(0, &cpu0);
 	temp = pthread_setaffinity_np(plot_thread, sizeof(cpu_set_t), &cpu0);
@@ -525,7 +525,7 @@ main(int  argc,
 	printf("setaffinity = %d \n", temp);
 
 	temp = pthread_setaffinity_np(control_thread_slave, sizeof(cpu_set_t), &cpu1);
-	printf("setaffinity = %d \n", temp);
+	printf("setaffinity = %d \n", temp);*/
 
 	double curTime, refTime = dhdGetTime();
 
