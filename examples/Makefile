@@ -4,7 +4,8 @@ include $(TOP_DIR)/Makefile.common
 
 # haptic examples
 SUBDIRS += wavesimple \
-	passivecontrol
+	passivecontrol \
+	systemidentification
 
 
 all: $(SUBDIRS)
