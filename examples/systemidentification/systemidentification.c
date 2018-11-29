@@ -20,6 +20,8 @@ double v[N] = { 0.0 }; // angular velocity
 
 double t[N] = { 0.0 }; // output torque
 
+double time = 0.0;
+
 int flag = 0;
 int done = 0;
 
@@ -109,6 +111,7 @@ void *plotThread(void *arg)
 		engPutVariable(m_pEngine, "dz", dz);
 
 		*t = dhdGetTime() - t1;
+		time = *t;
 		engPutVariable(m_pEngine, "t", time);
 		
 		engEvalString(m_pEngine, "plot([lt,t],[ldx,dx],'b'),hold on,");
@@ -119,6 +122,27 @@ void *plotThread(void *arg)
 	pthread_exit(NULL);
 	return NULL;
 
+}
+
+// data recording
+void *dataThread(void *arg)
+{
+	FILE *f = fopen("data.txt", "w");
+	if(f == NULL) {
+		printf("Error opening file!\n");
+		done = 1;	
+	}
+		const char *text = "Data record start...";
+		fprintf(f, "%s\n", text);
+
+	while(!done) {
+		fprintf(f, "+0.06%f,+0.06%f", time, j[0]);			
+	}
+	
+	fclose(f);
+	printf("Data record stop.\n");
+	pthread_exit(NULL);
+	return NULL;
 }
 
 int
