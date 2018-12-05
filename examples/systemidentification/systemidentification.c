@@ -11,6 +11,7 @@
 #define N 3
 #define TESTTORQUE -0.35
 #define IMPULSECYCLES 100
+#define TESTEDJOINT 2
 
 double p[N] = { 0.0 }; // end-effector position
 
@@ -38,12 +39,12 @@ void *controlThread(void *arg)
 		dhdGetDeltaJointAngles(&j[0],&j[1],&j[2]);
 		dhdDeltaGravityJointTorques(j[0], j[1], j[2], &q[0], &q[1], &q[2]);
 
-		if(flag) t[0] = TESTTORQUE;
-		else t[0] = 0.0;
+		if(flag) t[TESTEDJOINT] = TESTTORQUE;
+		else t[TESTEDJOINT] = 0.0;
 
 		dhdSetDeltaJointTorques(t[0] + q[0], t[1] + q[1], t[2] + q[2]);
 
-		if(t[0] == TESTTORQUE) cycle--;
+		if(t[TESTEDJOINT] == TESTTORQUE) cycle--;
 		if(cycle == 0) {
 			flag = 0;
 			cycle = IMPULSECYCLES;		
@@ -65,60 +66,60 @@ void *plotThread(void *arg)
 	}
 
 	mxArray* dx = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* dy = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* dz = mxCreateDoubleMatrix(1, 1, mxREAL);
+	//mxArray* dy = mxCreateDoubleMatrix(1, 1, mxREAL);
+	//mxArray* dz = mxCreateDoubleMatrix(1, 1, mxREAL);
 	mxArray* time = mxCreateDoubleMatrix(1, 1, mxREAL);
 
 	mxArray* ldx = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* ldy = mxCreateDoubleMatrix(1, 1, mxREAL);
-	mxArray* ldz = mxCreateDoubleMatrix(1, 1, mxREAL);
+	//mxArray* ldy = mxCreateDoubleMatrix(1, 1, mxREAL);
+	//mxArray* ldz = mxCreateDoubleMatrix(1, 1, mxREAL);
 	mxArray* ltime = mxCreateDoubleMatrix(1, 1, mxREAL);
 
 	double* px = mxGetPr(dx);
-	double* py = mxGetPr(dy);
-	double* pz = mxGetPr(dz);
+	//double* py = mxGetPr(dy);
+	//double* pz = mxGetPr(dz);
 	double* t = mxGetPr(time);
 
 	double* lpx = mxGetPr(ldx);
-	double* lpy = mxGetPr(ldy);
-	double* lpz = mxGetPr(ldz);
+	//double* lpy = mxGetPr(ldy);
+	//double* lpz = mxGetPr(ldz);
 	double* lt = mxGetPr(ltime);
 
 	double t1 = dhdGetTime();
 
-	*px = -j[0];
-	*py = -j[1];
-	*pz = -j[2];
+	*px = -j[TESTEDJOINT];
+	//*py = -j[1];
+	//*pz = -j[2];
 
 	while(!done) {
 
 		*lt = *t;
 		*lpx = *px;
-		*lpy = *py;
-		*lpz = *pz;
+		//*lpy = *py;
+		//*lpz = *pz;
 		
 		engPutVariable(m_pEngine, "ldx", ldx);
-		engPutVariable(m_pEngine, "ldy", ldy);
-		engPutVariable(m_pEngine, "ldz", ldz);
+		//engPutVariable(m_pEngine, "ldy", ldy);
+		//engPutVariable(m_pEngine, "ldz", ldz);
 		engPutVariable(m_pEngine, "lt", ltime);
 
 		// matlab plot
-		*px = -j[0];
-		*py = -j[1];
-		*pz = -j[2];
+		*px = -j[TESTEDJOINT];
+		//*py = -j[1];
+		//*pz = -j[2];
 
 		engPutVariable(m_pEngine, "dx", dx);
-		engPutVariable(m_pEngine, "dy", dy);
-		engPutVariable(m_pEngine, "dz", dz);
+		//engPutVariable(m_pEngine, "dy", dy);
+		//engPutVariable(m_pEngine, "dz", dz);
 
 		*t = dhdGetTime() - t1;
 		engPutVariable(m_pEngine, "t", time);
 		
-		engEvalString(m_pEngine, "plot([lt,t],[ldz,dz],'b'),hold on,");
+		engEvalString(m_pEngine, "plot([lt,t],[ldx,dx],'b'),hold on,");
 
 	}
 
-	printf("Plot thread stop.\n");
+	printf("plot thread stop.\n");
 	pthread_exit(NULL);
 	return NULL;
 
@@ -146,18 +147,18 @@ void *dataThread(void *arg)
 		refDataTime = dhdGetTime();
 		if(flag) dataFlag = 1;
 		while(dataFlag) {
-			tempJ = j[0];
+			tempJ = j[TESTEDJOINT];
 			currentDataTime = dhdGetTime();
 			deltaDataTime = currentDataTime - refDataTime;		
-			fprintf(f, "%0.06f, %0.06f\n", deltaDataTime, j[0]);
+			fprintf(f, "%0.06f, %0.06f\n", deltaDataTime, j[TESTEDJOINT]);
 			dhdSleep(0.001);
-			if(j[0] == tempJ) --dataSteady;
+			if(j[TESTEDJOINT] == tempJ) --dataSteady;
 			if(dataSteady == 0) dataFlag = 0;
 		}		
 	}
 	
 	fclose(f);
-	printf("Data record stop.\n");
+	printf("data record thread stop.\n");
 	pthread_exit(NULL);
 	return NULL;
 }
@@ -166,7 +167,9 @@ int
 main(int  argc,
 	char **argv)
 {
-
+	bool kbHit = false;
+	bool kbHitBack = false;
+	
 	// message
 	int major, minor, release, revision;
 	dhdGetSDKVersion(&major, &minor, &release, &revision);
@@ -234,12 +237,12 @@ main(int  argc,
 		fprintf(stderr, "Error creating thread...\n");
 		done = 1;	
 	}
-/*
+
 	if(pthread_create(&plot_thread, NULL, plotThread, NULL)) {
 		fprintf(stderr, "Error creating thread...\n");
 		done = 1;	
 	}
-*/
+
 	if(pthread_create(&data_thread, NULL, dataThread, NULL)) {
 		fprintf(stderr, "Error creating thread...\n");
 		done = 1;	
@@ -253,7 +256,7 @@ main(int  argc,
 		dhdDeltaJointTorquesExtrema(j[0], j[1], j[2], minq, maxq);
 
 		curTime = dhdGetTime();
-		if ((curTime - refTime) > 1.0) {
+		if ((curTime - refTime) > 0.1) {
 
 			refTime = curTime;
 
@@ -264,10 +267,12 @@ main(int  argc,
 
 
 			if (dhdGetButtonMask()) done = 1;
-			if (dhdKbHit()) {
+			kbHitBack = kbHit;
+			kbHit = dhdKbHit();
+			if (kbHit && (!kbHitBack)) {
 				switch (dhdKbGet()) {
 				case 'q': done = 1;   break;
-				case 'a': flag = 1;   break;
+				case 'a': flag = 1;   break;			
 				}
 			}
 		}
@@ -275,11 +280,12 @@ main(int  argc,
 
 	// report exit cause
 	printf("                                                                           \r");
-	if (done == -1) printf("\nregulation finished abnormally on slave device\n");
-	else            printf("\nexiting on user request\n");
+	if (done == -1) printf("\nregulation finished abnormally on slave device...\n");
+	else            printf("\nexiting on user request...\n");
 
 	// close the connection
 	drdClose();
+	dhdSleep(1.0);
 
 	// exit
 	printf("\ndone.\n");
