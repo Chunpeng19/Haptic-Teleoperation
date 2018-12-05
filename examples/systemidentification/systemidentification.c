@@ -9,8 +9,8 @@
 #include "engine.h"
 
 #define N 3
-#define TESTTORQUE 1.0
-#define IMPULSECYCLES 10
+#define TESTTORQUE -0.35
+#define IMPULSECYCLES 100
 
 double p[N] = { 0.0 }; // end-effector position
 
@@ -20,7 +20,8 @@ double v[N] = { 0.0 }; // angular velocity
 
 double t[N] = { 0.0 }; // output torque
 
-double time = 0.0;
+double minq[N];
+double maxq[N];
 
 int flag = 0;
 int done = 0;
@@ -85,9 +86,9 @@ void *plotThread(void *arg)
 
 	double t1 = dhdGetTime();
 
-	*px = j[0];
-	*py = j[1];
-	*pz = j[2];
+	*px = -j[0];
+	*py = -j[1];
+	*pz = -j[2];
 
 	while(!done) {
 
@@ -102,19 +103,18 @@ void *plotThread(void *arg)
 		engPutVariable(m_pEngine, "lt", ltime);
 
 		// matlab plot
-		*px = j[0];
-		*py = j[1];
-		*pz = j[2];
+		*px = -j[0];
+		*py = -j[1];
+		*pz = -j[2];
 
 		engPutVariable(m_pEngine, "dx", dx);
 		engPutVariable(m_pEngine, "dy", dy);
 		engPutVariable(m_pEngine, "dz", dz);
 
 		*t = dhdGetTime() - t1;
-		time = *t;
 		engPutVariable(m_pEngine, "t", time);
 		
-		engEvalString(m_pEngine, "plot([lt,t],[ldx,dx],'b'),hold on,");
+		engEvalString(m_pEngine, "plot([lt,t],[ldz,dz],'b'),hold on,");
 
 	}
 
@@ -127,16 +127,33 @@ void *plotThread(void *arg)
 // data recording
 void *dataThread(void *arg)
 {
-	FILE *f = fopen("data.txt", "w");
+	double currentDataTime, refDataTime, deltaDataTime;
+	int dataFlag = 0;
+	int dataSteady = 500;
+	double tempJ;
+	
+	FILE *f = fopen("/home/lowell/Documents/Haptic-Teleoperation/examples/systemidentification/data.txt", "w");
+
 	if(f == NULL) {
 		printf("Error opening file!\n");
 		done = 1;	
 	}
-		const char *text = "Data record start...";
-		fprintf(f, "%s\n", text);
+
+	//const char *text = "Data record start...";
+	//fprintf(f, "%s\n", text);
 
 	while(!done) {
-		fprintf(f, "+0.06%f,+0.06%f", time, j[0]);			
+		refDataTime = dhdGetTime();
+		if(flag) dataFlag = 1;
+		while(dataFlag) {
+			tempJ = j[0];
+			currentDataTime = dhdGetTime();
+			deltaDataTime = currentDataTime - refDataTime;		
+			fprintf(f, "%0.06f, %0.06f\n", deltaDataTime, j[0]);
+			dhdSleep(0.001);
+			if(j[0] == tempJ) --dataSteady;
+			if(dataSteady == 0) dataFlag = 0;
+		}		
 	}
 	
 	fclose(f);
@@ -211,14 +228,19 @@ main(int  argc,
 	printf("%s haptic device [sn: %04d] initialization completed...\n", dhdGetSystemName(), devsn);
 
 	// thread create
-	pthread_t control_thread, plot_thread;
+	pthread_t control_thread, plot_thread, data_thread;
 	
 	if(pthread_create(&control_thread, NULL, controlThread, NULL)) {
 		fprintf(stderr, "Error creating thread...\n");
 		done = 1;	
 	}
-
+/*
 	if(pthread_create(&plot_thread, NULL, plotThread, NULL)) {
+		fprintf(stderr, "Error creating thread...\n");
+		done = 1;	
+	}
+*/
+	if(pthread_create(&data_thread, NULL, dataThread, NULL)) {
 		fprintf(stderr, "Error creating thread...\n");
 		done = 1;	
 	}
@@ -228,15 +250,17 @@ main(int  argc,
 	// loop while the button is not pushed
 	while (!done) {
 
+		dhdDeltaJointTorquesExtrema(j[0], j[1], j[2], minq, maxq);
+
 		curTime = dhdGetTime();
-		if ((curTime - refTime) > 0.1) {
+		if ((curTime - refTime) > 1.0) {
 
 			refTime = curTime;
 
 			// retrieve information to display
-			printf("j = %+0.05f | %+0.05f | %+0.05f | ", j[0], j[1], j[2]);
-			printf("flag = %+02d | ", flag);
-			printf("f = %0.03f [kHz]\r", dhdGetComFreq());
+			printf("j = %+0.04f | %+0.04f | %+0.04f | ", minq[0], minq[1], minq[2]);
+			printf("j = %+0.04f | %+0.04f | %+0.04f | \r", maxq[0], maxq[1], maxq[2]);
+			//printf("f = %0.03f [kHz]\r", dhdGetComFreq());
 
 
 			if (dhdGetButtonMask()) done = 1;
