@@ -12,6 +12,7 @@
 #define TESTTORQUE -0.35
 #define IMPULSECYCLES 100
 #define TESTEDJOINT 2
+#define BALLMASS 68.1e-3 // mass substraction when end-effector removed
 
 double p[N] = { 0.0 }; // end-effector position
 
@@ -169,6 +170,7 @@ main(int  argc,
 {
 	bool kbHit = false;
 	bool kbHitBack = false;
+	double mass;
 	
 	// message
 	int major, minor, release, revision;
@@ -217,6 +219,11 @@ main(int  argc,
 	dhdGetSerialNumber(&devsn);
 	printf("%s haptic device [sn: %04d] connected...\n", dhdGetSystemName(), devsn);
 
+	// reset the mass if end-effector is removed
+	dhdGetEffectorMass(&mass);
+	mass = mass - BALLMASS;
+	dhdSetEffectorMass(mass);
+
 	// center both devices
 	drdMoveToPos(0.0, 0.0, 0.0, true);
 
@@ -237,12 +244,12 @@ main(int  argc,
 		fprintf(stderr, "Error creating thread...\n");
 		done = 1;	
 	}
-
+/*
 	if(pthread_create(&plot_thread, NULL, plotThread, NULL)) {
 		fprintf(stderr, "Error creating thread...\n");
 		done = 1;	
 	}
-
+*/
 	if(pthread_create(&data_thread, NULL, dataThread, NULL)) {
 		fprintf(stderr, "Error creating thread...\n");
 		done = 1;	
@@ -261,12 +268,13 @@ main(int  argc,
 			refTime = curTime;
 
 			// retrieve information to display
+			//printf("m = %+0.04f | ", mass);
 			printf("j = %+0.04f | %+0.04f | %+0.04f | ", minq[0], minq[1], minq[2]);
 			printf("j = %+0.04f | %+0.04f | %+0.04f | \r", maxq[0], maxq[1], maxq[2]);
 			//printf("f = %0.03f [kHz]\r", dhdGetComFreq());
 
 
-			if (dhdGetButtonMask()) done = 1;
+			//if (dhdGetButtonMask()) done = 1;
 			kbHitBack = kbHit;
 			kbHit = dhdKbHit();
 			if (kbHit && (!kbHitBack)) {
