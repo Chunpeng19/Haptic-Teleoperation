@@ -59,7 +59,7 @@ int masterWaveDecodeEncode(double *u, double *v, double *wavev, double *waveInpu
 int slaveWaveDecodeEncode(double *u, double *v, double *wavev, double *waveInput, double *torque, double *velocity, double *position, double *vd, double *jd, double *jdBack, double *jInput, double time, double totalTime, double b) {
 	
 	double Kp = DEFAULT_K;
-	double Kv = Kp / 100;
+	double Kv = Kp / 200;
 
 	for (int i = 0; i < N; i++) {			
 		u[i] = waveInput[i] - wavev[i] * totalTime;

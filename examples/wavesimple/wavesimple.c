@@ -12,11 +12,11 @@
 #include "drdc.h"
 #include "functionfortele.h"
 
-#include "engine.h"
+//#include "engine.h"
 #include <iostream>
 #include <string>
-#include <pthread.h>
-#include <sched.h>
+//#include <pthread.h>
+//#include <sched.h>
 
 //#pragma comment ( lib, "libmx.lib" )
 //#pragma comment ( lib, "libeng.lib" )
@@ -48,7 +48,7 @@ double mjDelay[N] = { 0.0 };
 int done = 0;
 
 double Kp = DEFAULT_K; // 1e3;
-double Kv = Kp / 100;
+double Kv = Kp / 200;
 double b = WAVEIMPEDANCE;
 
 int delayConst = DELAYCONST;
@@ -250,7 +250,7 @@ void *slaveThread(void *arg)
 	//drdClose(slave);
 	return NULL;
 }
-
+/*
 // plot loop
 void *plotThread(void *arg)
 {
@@ -371,7 +371,7 @@ void *plotThread(void *arg)
 
 	pthread_exit(NULL);
 
-}
+}*/
 
 int
 main(int  argc,
@@ -472,7 +472,7 @@ main(int  argc,
 	
 	// center both devices
 	drdMoveToEnc(ENC, ENC, ENC, false, master);
-	drdMoveToEnc(ENC - 150, ENC, ENC, true, slave);
+	drdMoveToEnc(ENC, ENC, ENC, true, slave);
 	while (drdIsMoving(master) || drdIsMoving(slave)) drdWaitForTick(master);
 
 	// stop regulation on master, stop motion filters on slave
@@ -509,11 +509,11 @@ main(int  argc,
 	if(pthread_create(&plot_thread, NULL, plotThread, NULL)) {
 		fprintf(stderr, "Error creating thread\n");
 		done = 1;	
-	}*/
+	}
 
 	cpu_set_t cpu0, cpu1;
 	int temp;
-/*	
+	
 	CPU_ZERO(&cpu0);
 	CPU_SET(0, &cpu0);
 	temp = pthread_setaffinity_np(plot_thread, sizeof(cpu_set_t), &cpu0);
